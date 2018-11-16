@@ -52,7 +52,10 @@ class Chicken(QtGui.QMainWindow):
 		self.sunriseLabel.setText(todayEvents['sunrise'].strftime(timeFormat))
 		self.sunsetLabel.setText(todayEvents['sunset'].strftime(timeFormat))
 		self.duskLabel.setText(todayEvents['dusk'].strftime(timeFormat))
-		todayLight = (todayEvents['sunset'] - todayEvents['sunrise']).total_seconds()
+		daylightSeconds = (todayEvents['sunset'] - todayEvents['sunrise']).total_seconds()
+		minutes, seconds = divmod(daylightSeconds, 60)
+		hours, minutes = divmod(minutes, 60)
+		self.daylightLabel.setText('{:.0f}h {:.0f}m {:.0f}s'.format(hours, minutes, seconds))
 		"""
 		print('Natural Light Today is {}'.format(str(timedelta(seconds=todayLight))))
 		print('Dawn Today is {}'.format(todayDawn.strftime(timeFormat)))
