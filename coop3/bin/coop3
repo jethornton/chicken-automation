@@ -1,0 +1,134 @@
+#!/usr/bin/python3
+
+import sys, os, pytz, astral, schedule, time
+from datetime import datetime, timedelta
+import RPi.GPIO as GPIO
+from PyQt4 import QtCore, QtGui, uic
+
+# setup some user variables
+extraLight = 180 # minutes of extra light after sunrise
+addLight = 5 # how many minutes per day to add light
+totalLight = 840 # minutes of total light up to summer
+minLight = 600 # minutes of natural light to start adding light
+
+# initalize some global variables
+localTz = 'US/Central'
+centralTz = pytz.timezone('US/Central')
+dateFormat = '%b %d %Y'
+timeFormat = '%I:%M %p'
+doorStatus = 'Unknown'
+
+# coordinates = ['City', 'Country', 'latitude', longitude', 'timezone', 'elevation']
+coordinates = ["Poplar Bluff", "USA", 36.763084, -90.413871, localTz, 110]
+pbmo = astral.Location(info=(coordinates))
+pbmo.solar_depression = "civil"
+
+
+
+class Chicken(QtGui.QMainWindow):
+	def __init__(self, parent=None):
+		super(Chicken, self).__init__()
+		path, filename = os.path.split(os.path.realpath(__file__))
+		uic.loadUi(os.path.join(path, 'coop3.ui'), self)
+		schedule.every().day.at('00:01').do(self.update)
+		self.connections()
+		self.update()
+		self.show()
+
+
+	def connections(self):
+		self.actionQuit.triggered.connect(sys.exit)
+		self.updateAstral.clicked.connect(self.test)
+
+	# on bootup/update set up the door/light open times for today
+	def update(self):
+
+		today = centralTz.localize(datetime.now())
+		self.dateLabel.setText(today.strftime(dateFormat))
+
+
+		todayEvents = pbmo.sun(today)
+		self.dawnLabel.setText(todayEvents['dawn'].strftime(timeFormat))
+		self.sunriseLabel.setText(todayEvents['sunrise'].strftime(timeFormat))
+		self.sunsetLabel.setText(todayEvents['sunset'].strftime(timeFormat))
+		self.duskLabel.setText(todayEvents['dusk'].strftime(timeFormat))
+		todayLight = (todayEvents['sunset'] - todayEvents['sunrise']).total_seconds()
+		"""
+		print('Natural Light Today is {}'.format(str(timedelta(seconds=todayLight))))
+		print('Dawn Today is {}'.format(todayDawn.strftime(timeFormat)))
+		print('Dusk Today is {}'.format(todayDusk.strftime(timeFormat)))
+
+		yesterday = today - timedelta(days = 1)
+		yesterdayEvents = pbmo.sun(yesterday)
+		yesterdaySunrise = yesterdayEvents['sunrise']
+		yesterdaySunset = yesterdayEvents['sunset']
+		yesterdayDaylight = ((yesterdaySunset - yesterdaySunrise).total_seconds())
+
+		# Summer and Fall if daylight is more than 10h and decreasing
+		if todayLight > (minLight * 60) and yesterdayDaylight > todayLight:
+			print('Using Summer/Fall Door/Light schedule')
+			doorOpen = todayDawn
+			totalLight = todayLight
+
+
+		# Winter if daylight is less than 10h and decreasing
+		if todayLight < (minLight * 60) and yesterdayDaylight > todayLight:
+			print('Using Winter Door/Light schedule')
+			i = 1
+			testDaylight = 0
+			while testDaylight < (minLight * 60):
+				daylightTestDate = today - timedelta(days = i)
+				testEvents = pbmo.sun(daylightTestDate)
+				testSunrise = testEvents['sunrise']
+				testSunset = testEvents['sunset']
+				testDaylight = (testSunset - testSunrise).total_seconds()
+				i += 1
+				if i > 100:
+					print('WTF the while loop failed!')
+					break
+			days = (today - daylightTestDate).days
+			print('Last 10h Daylight was {} days ago'.format(days))
+			totalLight = todayLight + (days * (addLight * 60))
+			doorOpen = todayDusk - timedelta(seconds=totalLight)
+
+		# Spring if daylight is less than 14h and increasing
+		if todayLight < (totalLight * 60) and yesterdayDaylight < todayLight:
+			print('Using Spring Door/Light schedule')
+			increasingLight = False
+			i = 1
+			lastTestDate = today
+			while not increasingLight:
+				currentTestDate = today - timedelta(days = i)
+				events = pbmo.sun(currentTestDate)
+				currentLight = int(((events['sunset'] - events['sunrise']).total_seconds()))
+				lastEvents = pbmo.sun(lastTestDate)
+				lastLight = int(((lastEvents['sunset'] - lastEvents['sunrise']).total_seconds()))
+				if currentLight > lastLight and currentLight > 36000:
+					days = (today - currentTestDate).days
+					totalLight = todayLight + (days * (addLight * 60))
+					doorOpen = todayDusk - timedelta(seconds=totalLight)
+					print('Light Start Date is {}, {} days ago'.format(currentTestDate.strftime(dateFormat), days))
+					break
+				i += 1
+				lastTestDate = currentTestDate
+				if i > 60:
+					print('WTF the while loop failed!')
+					break
+
+		print('Door Opens at {}'.format(doorOpen.strftime(timeFormat)))
+		print('Light On at {}'.format(doorOpen.strftime(timeFormat)))
+		print('Total Light Today {}'.format(str(timedelta(seconds=totalLight))))
+
+		lightOff = todaySunrise + timedelta(minutes=extraLight)
+		print('Light Off at {}'.format(lightOff.strftime(timeFormat)))
+		print('Door Closes at {}\n'.format(todayDusk.strftime(timeFormat)))
+		"""
+
+
+	def test(self):
+		print('testing')
+
+if __name__ == '__main__':
+	app = QtGui.QApplication(sys.argv)
+	window = Chicken()
+	sys.exit(app.exec_())

@@ -1,0 +1,98 @@
+#!/usr/bin/env python3
+
+#import datetime
+from datetime import date
+from datetime import datetime
+import time
+import astral
+import pytz
+import schedule
+
+localTz = 'US/Central'
+
+coordinates = ["Poplar Bluff", "USA", 36.763084, -90.413871, localTz, 110]
+pbmo = astral.Location(info=(coordinates))
+pbmo.solar_depression = "civil"
+
+dateFormat = '%b %d %Y'
+timeFormat = '%I:%M %p'
+
+#for event, time in pbmo.sun(date.today()).items():
+#	print(event, 'at', time)
+today = datetime.now(pytz.timezone(localTz))
+day_start = datetime.combine(today, datetime.min.time())
+midnight = datetime.combine(today, datetime.max.time())
+
+central = pytz.timezone(localTz)
+
+midnight_local = central.localize(midnight)
+
+#print(midnight)
+ 
+print('Today Min: %s ' % (day_start) )
+print('Midnight: %s ' % (midnight) ) 
+
+events = pbmo.sun(datetime.now(pytz.timezone(localTz)))
+dawn = events['dawn']
+sunrise = events['sunrise']
+sunset = events['sunset']
+dusk = events['dusk']
+now = datetime.now(pytz.timezone(localTz))
+print('Today Date {}'.format(now.strftime(dateFormat)))
+print('Inital Door Open == {}'.format(now > dawn and now < dusk))
+print('Dawn {}'.format(dawn.strftime(timeFormat)))
+print('Sunrise {}'.format(sunrise.strftime(timeFormat)))
+print('Now {}'.format(now.strftime(timeFormat)))
+print('Sunset {}'.format(sunset.strftime(timeFormat)))
+print('Dusk {}'.format(dusk.strftime(timeFormat)))
+#print(now > sunrise)
+#print(now > sunrise and now < dusk)
+#print(now > midnight_local)
+
+def update():
+	events = pbmo.sun(datetime.now(pytz.timezone(localTz)))
+	dawn = events['dawn']
+	sunrise = events['sunrise']
+	sunset = events['sunset']
+	dusk = events['dusk']
+
+def status():
+	now = datetime.now(pytz.timezone(localTz))
+	print('Time {} Door Open == {}'.format(now.strftime(timeFormat),
+	now > dawn and now < dusk))
+
+schedule.every(5).minutes.do(status)
+schedule.every().day.at("00:01").do(update)
+
+try:
+	while True:
+		schedule.run_pending()
+		time.sleep(.1)
+
+except KeyboardInterrupt:
+	# here you put any code you want to run before the program
+	# exits when you press CTRL+C
+	print('\nKeyBoard Interrupt')
+
+except Exception as e:
+	# this covers all other exceptions
+	print(str(e))
+
+"""
+city_name = 'Poplar Bluff'
+
+a = Astral()
+
+a.solar_depression = 'civil'
+
+city = a[city_name]
+
+#print('Information for {}/{}\n'.format(city_name, city.region))
+
+
+from pytz import all_timezones
+for timezone in all_timezones:
+	print(timezone)
+"""
+# US/Central
+

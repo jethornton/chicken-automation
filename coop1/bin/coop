@@ -1,0 +1,602 @@
+#!/usr/bin/env python
+
+# GPIO.VERSION '0.6.3'
+# Raspberry Pi 3 Model B Rev 1.2
+
+import RPi.GPIO as GPIO
+import schedule
+import astral
+import datetime
+#from datetime import datetime
+from datetime import timedelta
+from pytz import timezone
+import time
+import os
+import smbus2
+import bme280
+
+#setup BME280
+port = 1
+address = 0x76
+bus = smbus2.SMBus(port)
+calibration_params = bme280.load_calibration_params(bus, address)
+temphist = []
+humidhist = []
+temp_points = ''
+humid_points = ''
+chart_time = ['','','','','','','','','','','','','','','','','','','','','','','','','',]
+
+#from luma.core.interface.serial import i2c
+#from luma.core.render import canvas
+#from luma.oled.device import sh1106
+
+# setup the OLED
+#serial = i2c(port=1, address=0x3C)
+#device = sh1106(serial)
+
+GPIO.setmode(GPIO.BCM)
+GPIO.setwarnings(False)
+GPIO.setup(4, GPIO.OUT) # Motor FWD
+GPIO.output(4, False)
+GPIO.setup(5, GPIO.OUT) # Motor REV
+GPIO.output(5, False)
+GPIO.setup(6, GPIO.OUT) # Door Lock
+GPIO.output(6, False)
+GPIO.setup(7, GPIO.OUT) # Lights
+GPIO.output(7, False)
+GPIO.setup(22, GPIO.IN,pull_up_down=GPIO.PUD_DOWN) # Manual Up Door Switch
+GPIO.setup(23, GPIO.IN,pull_up_down=GPIO.PUD_DOWN) # Manual Down Door Switch
+GPIO.setup(24, GPIO.IN,pull_up_down=GPIO.PUD_DOWN) # Manual Light Switch
+GPIO.setup(26, GPIO.IN,pull_up_down=GPIO.PUD_DOWN) # Door Up Switch
+GPIO.setup(27, GPIO.IN,pull_up_down=GPIO.PUD_DOWN) # Door Down Switch
+
+"""
+# test for an internet connection so NTP time is verified
+hostname = "google.com"
+response = os.system("ping -c 1 " + hostname)
+
+#and then check the response...
+if response == 0:
+	#print hostname, 'is up!'
+	GPIO.output(7, True)
+	time.sleep(5)
+	GPIO.output(7, False)
+	time.sleep(2)
+	GPIO.output(7, True)
+	time.sleep(2)
+	GPIO.output(7, False)
+else:
+	@print hostname, 'is down!'
+	exit()
+"""
+# Construct our location.  Longitude west and latitude south are negative
+coordinates = ["Poplar Bluff", "USA", 36.763084, -90.413871, "US/Central", 110]
+pbmo = astral.Location(info=(coordinates))
+pbmo.solar_depression = "civil"
+
+egglight = 600 #840 # minutes of daylight desired
+timeformat = "%I:%M %p"
+
+dawn = timezone('US/Central').localize(datetime.datetime.now())
+sunrise = timezone('US/Central').localize(datetime.datetime.now())
+sunset = timezone('US/Central').localize(datetime.datetime.now())
+dusk = timezone('US/Central').localize(datetime.datetime.now())
+lighton = timezone('US/Central').localize(datetime.datetime.now())
+now = timezone('US/Central').localize(datetime.datetime.now())
+lights = False
+runtime = 0
+
+htmlcontents = ''' <!DOCTYPE html>
+<html lang="en">
+	<head>
+		<meta charset="utf-8">
+		<meta http-equiv="refresh" content="15" >
+		<title>Chicken</title>
+	</head>
+	<body>
+		<p>{}</P>
+		<p>Dawn {} Sunrise {} Sunset {} Dusk {}</p>
+		<p>Daylight {} Extra Light {}</p>
+		<p>Door Opens at {} Door Closes at {}</p>
+		<p>Door is {} Lights are {} Temperature {}F Humidity {}% Pressure {} hPa</p>
+		<svg viewBox="0 0 600 175" preserveAspectRatio="xMinYMax meet" class="chart">
+			<rect x="25" width="490" height="150" stroke="black" stroke-width="1" fill="none"/>
+			<line x1="26" y1="25" x2="514" y2="25" style="stroke:rgb(128,128,0);stroke-width:1" />
+			<line x1="26" y1="50" x2="514" y2="50" style="stroke:rgb(128,128,0);stroke-width:1" />
+			<line x1="26" y1="75" x2="514" y2="75" style="stroke:rgb(128,128,0);stroke-width:1" />
+			<line x1="26" y1="100" x2="514" y2="100" style="stroke:rgb(128,128,0);stroke-width:1" />
+			<line x1="26" y1="125" x2="514" y2="125" style="stroke:rgb(128,128,0);stroke-width:1" />
+			<text x="0" y="25" style="fill:blue;" font-size="10px">100
+			<tspan x="0" y="50">75</tspan>
+			<tspan x="0" y="75">50</tspan>
+			<tspan x="0" y="100">25</tspan>
+			<tspan x="0" y="125">0</tspan>
+			<tspan x="0" y="150">-25</tspan>
+			</text>
+			<text x="150" y="170" style="fill:black;" font-size="10px">Temperature History</text>
+			/*The Y data needs to be 125 = 0 so for positive numbers subtract the temperature
+			from 125*/
+			<polyline
+			fill="none"
+			stroke="#0074d9"
+			stroke-width="2"
+			{}
+		</svg>
+		<br><br>
+		<svg viewBox="0 0 600 175" preserveAspectRatio="xMinYMax meet" class="chart">
+			<rect x="25" y="10" width="470" height="100" stroke="black" stroke-width="1" fill="none"/>
+			<line x1="26" y1="35" x2="504" y2="35" style="stroke:rgb(128,128,0);stroke-width:1" />
+			<line x1="26" y1="60" x2="504" y2="60" style="stroke:rgb(128,128,0);stroke-width:1" />
+			<line x1="26" y1="85" x2="504" y2="85" style="stroke:rgb(128,128,0);stroke-width:1" />
+			<text x="0" y="13" style="fill:blue;" font-size="10px">100
+			<tspan x="0" y="37">75</tspan>
+			<tspan x="0" y="63">50</tspan>
+			<tspan x="0" y="87">25</tspan>
+			<tspan x="0" y="113">0</tspan>
+			</text>
+			<text x="225" y="8" style="fill:black;" font-size="10px">Humidity History</text>
+			/*The Y data needs to be 125 = 0 so for positive numbers subtract the temperature
+			from 125*/
+			<text x="23" y="120" style="fill:blue;" font-size="8px">0
+			<tspan x="43" y="120">1</tspan>
+			<tspan x="63" y="120">2</tspan>
+			<tspan x="83" y="120">3</tspan>
+			<tspan x="103" y="120">4</tspan>
+			<tspan x="123" y="120">5</tspan>
+			<tspan x="143" y="120">6</tspan>
+			<tspan x="163" y="120">7</tspan>
+			<tspan x="183" y="120">8</tspan>
+			<tspan x="203" y="120">9</tspan>
+			<tspan x="220" y="120">10</tspan>
+			<tspan x="240" y="120">11</tspan>
+			<tspan x="260" y="120">12</tspan>
+			<tspan x="280" y="120">13</tspan>
+			<tspan x="300" y="120">14</tspan>
+			<tspan x="320" y="120">15</tspan>
+			<tspan x="340" y="120">16</tspan>
+			<tspan x="360" y="120">17</tspan>
+			<tspan x="380" y="120">18</tspan>
+			<tspan x="400" y="120">19</tspan>
+			<tspan x="420" y="120">20</tspan>
+			<tspan x="440" y="120">21</tspan>
+			<tspan x="460" y="120">22</tspan>
+			<tspan x="480" y="120">23</tspan>
+			<tspan x="500" y="120">24</tspan>
+			</text>
+			<polyline
+			fill="none"
+			stroke="#0074d9"
+			stroke-width="2"
+			{}
+			</svg>
+
+	</body>
+</html>
+'''
+
+htmlcontent = ''' <!DOCTYPE html>
+<html lang="en">
+	<head>
+		<meta charset="utf-8">
+		<meta http-equiv="refresh" content="15" >
+		<title>Chicken</title>
+	</head>
+	<body>
+		<p>{time_now}</P>
+		<p>Dawn {dawn} Sunrise {sunrise} Sunset {sunset} Dusk {dusk}</p>
+		<p>Daylight {daylight} Extra Light {lights}</p>
+		<p>Door Opens at {door_opens} Door Closes at {dusk}</p>
+		<p>Door is {door_status} Lights are {light_status} 
+		Temperature {temperature}F Humidity {humidity}% Pressure {pressure} hPa</p>
+		<svg viewBox="0 0 600 175" preserveAspectRatio="xMinYMax meet" class="chart">
+			<rect x="25" width="490" height="150" stroke="black" stroke-width="1" fill="none"/>
+			<line x1="26" y1="25" x2="514" y2="25" style="stroke:rgb(128,128,0);stroke-width:1" />
+			<line x1="26" y1="50" x2="514" y2="50" style="stroke:rgb(128,128,0);stroke-width:1" />
+			<line x1="26" y1="75" x2="514" y2="75" style="stroke:rgb(128,128,0);stroke-width:1" />
+			<line x1="26" y1="100" x2="514" y2="100" style="stroke:rgb(128,128,0);stroke-width:1" />
+			<line x1="26" y1="125" x2="514" y2="125" style="stroke:rgb(128,128,0);stroke-width:1" />
+			<text x="0" y="25" style="fill:blue;" font-size="10px">100
+			<tspan x="0" y="50">75</tspan>
+			<tspan x="0" y="75">50</tspan>
+			<tspan x="0" y="100">25</tspan>
+			<tspan x="0" y="125">0</tspan>
+			<tspan x="0" y="150">-25</tspan>
+			</text>
+			<text x="150" y="170" style="fill:black;" font-size="10px">Temperature History</text>
+			/*The Y data needs to be 125 = 0 so for positive numbers subtract the temperature
+			from 125*/
+			<polyline
+			fill="none"
+			stroke="#0074d9"
+			stroke-width="2"
+			{tempature_points}
+		</svg>
+		<br><br>
+		<svg viewBox="0 0 600 175" preserveAspectRatio="xMinYMax meet" class="chart">
+			<rect x="25" y="10" width="480" height="100" stroke="black" stroke-width="1" fill="none"/>
+			<line x1="26" y1="35" x2="504" y2="35" style="stroke:rgb(128,128,0);stroke-width:1" />
+			<line x1="26" y1="60" x2="504" y2="60" style="stroke:rgb(128,128,0);stroke-width:1" />
+			<line x1="26" y1="85" x2="504" y2="85" style="stroke:rgb(128,128,0);stroke-width:1" />
+			<text x="0" y="13" style="fill:blue;" font-size="10px">100
+			<tspan x="0" y="37">75</tspan>
+			<tspan x="0" y="63">50</tspan>
+			<tspan x="0" y="87">25</tspan>
+			<tspan x="0" y="113">0</tspan>
+			</text>
+			<text x="225" y="8" style="fill:black;" font-size="10px">Humidity History</text>
+			/*The Y data needs to be 125 = 0 so for positive numbers subtract the temperature
+			from 125*/
+			<text x="23" y="120" style="fill:blue;" font-size="8px">{time0}
+			<tspan x="43" y="120">{time1}</tspan>
+			<tspan x="63" y="120">{time2}</tspan>
+			<tspan x="83" y="120">{time3}</tspan>
+			<tspan x="103" y="120">{time4}</tspan>
+			<tspan x="123" y="120">{time5}</tspan>
+			<tspan x="143" y="120">{time6}</tspan>
+			<tspan x="163" y="120">{time7}</tspan>
+			<tspan x="183" y="120">{time8}</tspan>
+			<tspan x="203" y="120">{time9}</tspan>
+			<tspan x="220" y="120">{time10}</tspan>
+			<tspan x="240" y="120">{time11}</tspan>
+			<tspan x="260" y="120">{time12}</tspan>
+			<tspan x="280" y="120">{time13}</tspan>
+			<tspan x="300" y="120">{time14}</tspan>
+			<tspan x="320" y="120">{time15}</tspan>
+			<tspan x="340" y="120">{time16}</tspan>
+			<tspan x="360" y="120">{time17}</tspan>
+			<tspan x="380" y="120">{time18}</tspan>
+			<tspan x="400" y="120">{time19}</tspan>
+			<tspan x="420" y="120">{time20}</tspan>
+			<tspan x="440" y="120">{time21}</tspan>
+			<tspan x="460" y="120">{time22}</tspan>
+			<tspan x="480" y="120">{time23}</tspan>
+			</text>
+			<polyline
+			fill="none"
+			stroke="#0074d9"
+			stroke-width="2"
+			{humidity_points}
+			</svg>
+
+	</body>
+</html>
+'''
+
+
+def update():
+	global dawn
+	global sunrise
+	global sunset
+	global lighton
+	global dooropen
+	global dusk
+	global daylight
+	global lights
+	global runtime
+	dawn = pbmo.dawn(datetime.date.today())
+	sunrise = pbmo.sunrise(datetime.date.today())
+	sunset = pbmo.sunset(datetime.date.today())
+	dusk = pbmo.dusk(datetime.date.today())
+	daylight = sunset - sunrise
+
+	# amount of daylight in HH:MM:SS
+	daylight = sunset - sunrise
+	print "Daylight {}".format(daylight)
+
+	lightmin = daylight.seconds / 60
+	if egglight > lightmin:
+		extralightminutes = egglight - lightmin
+		lighton = sunrise - datetime.timedelta(minutes=extralightminutes)
+		dooropen = lighton
+		lights = True
+		#print "Lights On {} and Door Opens".format(lighton.strftime(timeformat))
+		#print "Sunrise {}".format(sunrise.strftime(timeformat))
+	else:
+		lights = False
+		dooropen = dawn
+		#print "Sunrise {} and Door Opens".format(sunrise.strftime(timeformat))
+
+	#print "Sunset {}".format(sunset.strftime(timeformat))
+	#print "Dusk {} and Door Closes".format(dusk.strftime(timeformat))
+	#print os.getegid()
+
+def status():
+	global dawn
+	global sunrise
+	global sunset
+	global lighton
+	global dooropen
+	global dusk
+	global daylight
+	global lights
+	global runtime
+	global htmlcontents
+	global temphist
+	global chart_time
+
+	door = "Unknown"
+	light = "Off"
+	now = timezone('US/Central').localize(datetime.datetime.now())
+	print dawn < now
+	print now < (sunrise + timedelta(minutes=30))
+	#print(datetime.datetime.now().strftime("%H:%M"))
+	#print lighton < now
+	#print now < sunrise
+	#print now > sunrise
+	#print now < lighton
+	#print now > sunset
+
+	# get BME280 data and format it
+	data = bme280.sample(bus, address, calibration_params)
+	temperature = round((data.temperature * 1.8) + 32, 1)
+	humidity = round(data.humidity, 1)
+	pressure = round(data.pressure, 1)
+
+	# redo lights if egglight > 0 then test for extra light
+	# if egglight is == 0 then turn on lights at dawn and turn off 15 minutes
+	# after sunrise
+	if not GPIO.input(24): # Manual Light Switch
+		if lights and lighton < now and now < (sunrise + timedelta(minutes=30)):
+			GPIO.output(7, True) # Lights
+		elif dawn < now and now < (sunrise + timedelta(minutes=120)):
+			GPIO.output(7, True) # Lights
+
+		if GPIO.input(7):
+			light = "On"
+
+		if now > (sunrise + timedelta(minutes=120)):
+			GPIO.output(7, False) # Lights
+
+	if dooropen < now and now < dusk:
+		if not GPIO.input(26) and runtime < 60: # Up Door Switch
+			#print "The door is opening"
+			GPIO.output(4, True) # Motor FWD
+			GPIO.output(6, True) # Door Lock
+
+	if now < dooropen or now > dusk:
+		if not GPIO.input(27) and runtime < 60: # Down Door Switch
+			#print "The door is closing"
+			GPIO.output(5, True) # Motor REV
+			GPIO.output(6, True) # Door Lock
+
+	if GPIO.input(26): # Up Door Switch
+		door = "Open"
+
+	if GPIO.input(27): # Down Door Switch
+		door = "Closed"
+
+	#print"{} Light is {}, Door is {}, Runtime is {}".format(now.strftime("%H:%M"), light, door, runtime)
+
+	# Update the web page need to know if lighton is before sunrise
+	fields = {'time_now' : now.strftime("%b %d %Y %I:%M %p"),
+						'dawn' : dawn.strftime(timeformat),
+						'sunrise' : sunrise.strftime(timeformat),
+						'sunset' : sunset.strftime(timeformat),
+						'dusk' : dusk.strftime(timeformat),
+						'daylight' : daylight,
+						'lights' : lights,
+						'door_opens' : dooropen.strftime(timeformat),
+						'door_closes' : dusk.strftime(timeformat),
+						'door_status' : door,
+						'light_status' : light,
+						'temperature' : temperature,
+						'humidity' : humidity,
+						'pressure' : pressure,
+						'tempature_points' : temp_points,
+						'time0' : chart_time[0],
+						'time1' : chart_time[1],
+						'time2' : chart_time[2],
+						'time3' : chart_time[3],
+						'time4' : chart_time[4],
+						'time5' : chart_time[5],
+						'time6' : chart_time[6],
+						'time7' : chart_time[7],
+						'time8' : chart_time[8],
+						'time9' : chart_time[9],
+						'time10' : chart_time[10],
+						'time11' : chart_time[11],
+						'time12' : chart_time[12],
+						'time13' : chart_time[13],
+						'time14' : chart_time[14],
+						'time15' : chart_time[15],
+						'time16' : chart_time[16],
+						'time17' : chart_time[17],
+						'time18' : chart_time[18],
+						'time19' : chart_time[19],
+						'time20' : chart_time[20],
+						'time21' : chart_time[21],
+						'time22' : chart_time[22],
+						'time23' : chart_time[23],
+						'humidity_points' : humid_points,
+						}
+	#print fields
+
+	htmlout = open("/var/www/html/chick.html", "w")
+	htmlout.write(htmlcontent.format(**fields))
+	htmlout.close()
+
+	output = open("/var/www/html/chicken.html","w")
+	output.write(htmlcontents.format(now.strftime("%b %d %Y %I:%M %p"),
+		dawn.strftime(timeformat),
+		sunrise.strftime(timeformat),
+		sunset.strftime(timeformat),
+		dusk.strftime(timeformat),
+		daylight,
+		lights,
+		dooropen.strftime(timeformat),
+		dusk.strftime(timeformat),
+		door,
+		light,
+		temperature,
+		humidity,
+		pressure,
+		temp_points,
+		humid_points))
+	output.close()
+
+def weather(): # log the weather data into a list
+	global humidhist
+	global temphist
+	global temp_points
+	global humid_points
+	global chart_time
+	data = bme280.sample(bus, address, calibration_params)
+	temperature = round((data.temperature * 1.8) + 32, 1)
+	#print temperature
+	humidity = round(data.humidity, 1)
+	pressure = round(data.pressure, 1)
+	hour_list = ["0", "1", "2", "3", "4", "5", "6", "7", "8", "9", "10", "11", "12","13", "14", "15", "16", "17", "18", "19", "20", "21", "22", "23"]
+
+
+	if len(temphist) > 98:
+		temphist.pop(0)
+	temphist.append(temperature)
+	#print temphist
+
+	if len(temphist) > 0:
+		str_list=['points="']
+		for num, data in enumerate(temphist, start=5):
+			#print 'num ' + str(data)
+			if data >= 0:
+				item_str = str(num * 5) + ',' + str(125 - data) + ' '
+			elif data < 0:
+				item_str = str(num * 5) + ',' + str(125 + data) + ' '
+			str_list.append(item_str)
+		temp_points = ''.join(str_list)
+		temp_points = temp_points[:-1]
+		temp_points = temp_points + '"'
+		#print 'temp ' + temp_points
+
+	if len(humidhist) >= 96:
+		humidhist.pop(0)
+	humidhist.append(round(humidity, 1))
+
+	if len(humidhist) > 0:
+		str_list=['points="']
+		for num, data in enumerate(humidhist, start=5):
+			if data >= 0:
+				item_str = str(num * 5) + ',' + str(110 - data) + ' '
+			str_list.append(item_str)
+		humid_points = ''.join(str_list)
+		humid_points = humid_points[:-1]
+		humid_points = humid_points + '"'
+		#print now.strftime("%-H")
+		#print 'humid ' + humid_points
+		# build the list if the num == 0 or 24 only
+		chart_hours = int(round(len(humidhist)/4))
+		now_hour = int(now.strftime("%-H"))
+		#print now_hour , chart_hours
+		if len(humidhist) == 1: # build the chart times list
+			chart_time = hour_list[now_hour:] + hour_list[:now_hour]
+			#print chart_time
+		print "length of humidlist " + str(len(humidhist))
+		if len(humidhist) == 96: # rebuild the chart times list
+			chart_time = hour_list[now_hour:] + hour_list[:now_hour]
+		# print chart_time[chart_hours]
+
+	#print temphist
+	#print humidhist
+
+
+update()
+
+if not GPIO.input(22) and not GPIO.input(23): # Auto Door Mode
+	status()
+
+schedule.every(1).minutes.do(status)
+schedule.every(15).minutes.do(weather)
+#schedule.every().hour.do(weather)
+schedule.every().day.at("02:00").do(update)
+
+try:
+	while True:
+		if GPIO.input(22) or GPIO.input(23): # Manual Door Mode
+			manual = True
+		if not GPIO.input(22) and not GPIO.input(23): # Auto Door Mode
+			manual = False
+
+		if not manual:
+			schedule.run_pending()
+
+		if manual:
+			if GPIO.input(22) and not GPIO.input(26):
+				GPIO.output(4, True) # Motor FWD
+				GPIO.output(6, True) # Door Lock
+			if GPIO.input(22) and GPIO.input(26):
+				GPIO.output(4, False) # Motor FWD
+				GPIO.output(6, False) # Door Lock
+				#print "Manual Door Up"
+			if GPIO.input(23) and not GPIO.input(27):
+				GPIO.output(5, True) # Motor REV
+				GPIO.output(6, True) # Door Lock
+			if GPIO.input(23) and GPIO.input(27):
+				GPIO.output(5, False) # Motor REV
+				GPIO.output(6, False) # Door Lock
+				#print "Manual Door Down"
+
+		#Manual lights
+		manual_light = False
+		if GPIO.input(24):
+			manual_light = True
+			GPIO.output(7, True) # Lights
+		if not GPIO.input(24) and manual_light:
+			manual_light = False
+			GPIO.output(7, False) # Lights
+
+		if GPIO.input(6): # the door lock is on meaning the door is moving
+			runtime += 1
+			#print runtime
+
+		if runtime >= 90:
+			GPIO.output(4, False) # Motor FWD
+			GPIO.output(5, False) # Motor REV
+			GPIO.output(6, False) # Door Lock
+
+		if GPIO.input(4) and GPIO.input(26): # Motor FWD and Up Door Switch
+			GPIO.output(4, False) # Motor FWD
+			GPIO.output(6, False) # Door Lock
+			runtime = 0
+
+		if GPIO.input(5) and GPIO.input(27): # Motor REV and Down Door Switch
+			GPIO.output(5, False) # Motor REV
+			GPIO.output(6, False) # Door Lock
+			runtime = 0
+
+		if not GPIO.input(4) and not GPIO.input(5) and not GPIO.input(6):
+			if GPIO.input(26) or GPIO.input(27):
+				runtime = 0
+
+		if GPIO.input(26):
+			door_status = "Open"
+		if GPIO.input(27):
+			door_status = "Closed"
+		if not GPIO.input(26) and not GPIO.input(27):
+			door_status = "Unknown"
+
+		# Update the light status by reading the output
+		if GPIO.input(7): # Lights
+			light_status = "On"
+		if not GPIO.input(7):
+			light_status = "Off"
+
+		now = timezone('US/Central').localize(datetime.datetime.now())
+
+		#with canvas(device) as draw:
+			#draw.rectangle(device.bounding_box, outline="white", fill="black")
+			#draw.text((10, 5), "Door Status {}".format(door_status), fill="white")
+			#draw.text((10, 15), "Lights are {}".format(light_status), fill="white")
+			#draw.text((10, 25), "{}".format(now.strftime("%b %d %y %H:%M:%S")), fill="white")
+
+		time.sleep(1)
+
+except KeyboardInterrupt:
+	# here you put any code you want to run before the program
+	# exits when you press CTRL+C
+	print "\nKeyBoard Interrupt"
+
+except Exception,e:
+	# this covers all other exceptions
+	print str(e)
+
+finally:
+	GPIO.cleanup() # this ensures a clean exit

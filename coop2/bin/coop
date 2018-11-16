@@ -1,0 +1,279 @@
+#!/usr/bin/env python3
+
+"""
+GPIO.VERSION '0.6.3'
+Raspberry Pi 3 Model B Rev 1.2
+
+Coop Door/Light with added daylight based on the following schedule:
+
+Summer and Fall
+If natural daylight is more than 10h and decreasing
+	Open door and turn on lights at dawn
+
+Winter
+If natural daylight is less than 10h and decreasing
+	Find the last date of 10h daylight
+		Add 5 minutes per day from that date
+
+Spring
+If natural daylight is less than 10h and increasing
+	Find the last date of 10h of daylight with daylight decreasing
+		Add 5 minutes per day from that date
+"""
+
+import sys, pytz, astral, schedule, time
+from datetime import datetime, timedelta
+import RPi.GPIO as GPIO
+from digole import lcd
+
+# setup some user variables
+extraLight = 180 # minutes of extra light after sunrise
+addLight = 5 # how many minutes per day to add light
+totalLight = 840 # minutes of total light up to summer
+minLight = 600 # minutes of natural light to start adding light
+
+# basackwards relay constants
+RUN = False
+STOP = True
+
+# setup I/O Constants
+DOOR_UP = 4
+DOOR_DOWN = 5
+DOOR_LOCK = 6
+LIGHTS = 7
+MAN_UP = 22
+MAN_DOWN = 23
+MAN_LIGHT = 24
+UP_PROX = 26
+DOWN_PROX = 27
+
+# setup I/O
+GPIO.setmode(GPIO.BCM)
+GPIO.setwarnings(False)
+GPIO.setup(DOOR_UP, GPIO.OUT) # Motor FWD
+GPIO.output(DOOR_UP, STOP)
+GPIO.setup(DOOR_DOWN, GPIO.OUT) # Motor REV
+GPIO.output(DOOR_DOWN, STOP)
+GPIO.setup(DOOR_LOCK, GPIO.OUT) # Door Lock
+GPIO.output(DOOR_LOCK, STOP)
+GPIO.setup(LIGHTS, GPIO.OUT) # Lights
+GPIO.output(LIGHTS, STOP)
+GPIO.setup(MAN_UP, GPIO.IN,pull_up_down=GPIO.PUD_DOWN) # Manual Up Switch
+GPIO.setup(MAN_DOWN, GPIO.IN,pull_up_down=GPIO.PUD_DOWN) # Manual Down Switch
+GPIO.setup(MAN_LIGHT, GPIO.IN,pull_up_down=GPIO.PUD_DOWN) # Manual Light Switch
+GPIO.setup(UP_PROX, GPIO.IN,pull_up_down=GPIO.PUD_DOWN) # Door Up Switch
+GPIO.setup(DOWN_PROX, GPIO.IN,pull_up_down=GPIO.PUD_DOWN) # Door Down Switch
+
+# initalize some flags
+doorManualUp = False
+doorManualDown = False
+lightManualOn = False
+
+# initalize some global variables
+localTz = 'US/Central'
+centralTz = pytz.timezone('US/Central')
+dateFormat = '%b %d %Y'
+timeFormat = '%I:%M %p'
+doorStatus = 'Unknown'
+
+# coordinates = ['City', 'Country', 'latitude', longitude', 'timezone', 'elevation']
+coordinates = ["Poplar Bluff", "USA", 36.763084, -90.413871, localTz, 110]
+pbmo = astral.Location(info=(coordinates))
+pbmo.solar_depression = "civil"
+
+# setup the color LCD display
+display = lcd()
+display.clearScreen()
+display.setForeColor('White')
+display.setBackColor('Black')
+
+# on bootup/update set up the door/light open times for today
+def update():
+	global doorOpen
+	global todayDusk
+	global lightOff
+
+	today = centralTz.localize(datetime.now())
+	print('Today is {} {}'.format(today.strftime(dateFormat), today.strftime(timeFormat)))
+
+	todayEvents = pbmo.sun(today)
+	todayDawn = todayEvents['dawn']
+	todaySunrise = todayEvents['sunrise']
+	todaySunset = todayEvents['sunset']
+	todayDusk = todayEvents['dusk']
+	todayLight = (todaySunset - todaySunrise).total_seconds()
+
+	print('Natural Light Today is {}'.format(str(timedelta(seconds=todayLight))))
+	print('Dawn Today is {}'.format(todayDawn.strftime(timeFormat)))
+	print('Dusk Today is {}'.format(todayDusk.strftime(timeFormat)))
+
+	yesterday = today - timedelta(days = 1)
+	yesterdayEvents = pbmo.sun(yesterday)
+	yesterdaySunrise = yesterdayEvents['sunrise']
+	yesterdaySunset = yesterdayEvents['sunset']
+	yesterdayDaylight = ((yesterdaySunset - yesterdaySunrise).total_seconds())
+
+	# Summer and Fall if daylight is more than 10h and decreasing
+	if todayLight > (minLight * 60) and yesterdayDaylight > todayLight:
+		print('Using Summer/Fall Door/Light schedule')
+		doorOpen = todayDawn
+		totalLight = todayLight
+
+
+	# Winter if daylight is less than 10h and decreasing
+	if todayLight < (minLight * 60) and yesterdayDaylight > todayLight:
+		print('Using Winter Door/Light schedule')
+		i = 1
+		testDaylight = 0
+		while testDaylight < (minLight * 60):
+			daylightTestDate = today - timedelta(days = i)
+			testEvents = pbmo.sun(daylightTestDate)
+			testSunrise = testEvents['sunrise']
+			testSunset = testEvents['sunset']
+			testDaylight = (testSunset - testSunrise).total_seconds()
+			i += 1
+			if i > 100:
+				print('WTF the while loop failed!')
+				break
+		days = (today - daylightTestDate).days
+		print('Last 10h Daylight was {} days ago'.format(days))
+		totalLight = todayLight + (days * (addLight * 60))
+		doorOpen = todayDusk - timedelta(seconds=totalLight)
+
+	# Spring if daylight is less than 14h and increasing
+	if todayLight < (totalLight * 60) and yesterdayDaylight < todayLight:
+		print('Using Spring Door/Light schedule')
+		increasingLight = False
+		i = 1
+		lastTestDate = today
+		while not increasingLight:
+			currentTestDate = today - timedelta(days = i)
+			events = pbmo.sun(currentTestDate)
+			currentLight = int(((events['sunset'] - events['sunrise']).total_seconds()))
+			lastEvents = pbmo.sun(lastTestDate)
+			lastLight = int(((lastEvents['sunset'] - lastEvents['sunrise']).total_seconds()))
+			if currentLight > lastLight and currentLight > 36000:
+				days = (today - currentTestDate).days
+				totalLight = todayLight + (days * (addLight * 60))
+				doorOpen = todayDusk - timedelta(seconds=totalLight)
+				print('Light Start Date is {}, {} days ago'.format(currentTestDate.strftime(dateFormat), days))
+				break
+			i += 1
+			lastTestDate = currentTestDate
+			if i > 60:
+				print('WTF the while loop failed!')
+				break
+
+	print('Door Opens at {}'.format(doorOpen.strftime(timeFormat)))
+	print('Light On at {}'.format(doorOpen.strftime(timeFormat)))
+	print('Total Light Today {}'.format(str(timedelta(seconds=totalLight))))
+
+	lightOff = todaySunrise + timedelta(minutes=extraLight)
+	print('Light Off at {}'.format(lightOff.strftime(timeFormat)))
+	print('Door Closes at {}\n'.format(todayDusk.strftime(timeFormat)))
+
+def refresh(): # update the display and web page
+	global display
+	global doorOpen
+	global todayDusk
+	global doorStatus
+
+
+	display.changePosition(0, 0)
+	nowTime = datetime.now().strftime(timeFormat)
+	dow = datetime.now().strftime('%A')
+	display.writeLine('{} {}'.format(dow, nowTime))
+	display.changePosition(0, 1)
+	display.writeLine('Door opens {}'.format(doorOpen.strftime(timeFormat)))
+	display.changePosition(0, 2)
+	display.writeLine('Door closes {}'.format(todayDusk.strftime(timeFormat)))
+	display.changePosition(0, 3)
+	display.writeLine('Door status {}'.format(doorStatus))
+
+schedule.every().day.at('00:01').do(update)
+schedule.every(10).seconds.do(refresh)
+update()
+
+try:
+	while True:
+		now = centralTz.localize(datetime.now())
+		# Auto Door
+		if not GPIO.input(MAN_UP) and not GPIO.input(MAN_DOWN):
+			if now > doorOpen and now < todayDusk: # Door Open
+				if not GPIO.input(UP_PROX):
+					GPIO.output(DOOR_UP, RUN) # Motor FWD
+					GPIO.output(DOOR_LOCK, RUN) # Door Lock
+					doorStatus = 'Unknown'
+				else:
+					GPIO.output(DOOR_UP, STOP) # Motor FWD
+					GPIO.output(DOOR_LOCK, STOP) # Door Lock
+					doorStatus = 'Up     '
+			else: # Door Close
+				if not GPIO.input(DOWN_PROX):
+					GPIO.output(DOOR_DOWN, RUN) # Motor REV
+					GPIO.output(DOOR_LOCK, RUN) # Door Lock
+					doorStatus = 'Unknown'
+				else:
+					GPIO.output(DOOR_DOWN, STOP) # Motor REV
+					GPIO.output(DOOR_LOCK, STOP) # Door Lock
+					doorStatus = 'Down   '
+
+		# Auto Light On/Off
+		if not GPIO.input(MAN_LIGHT):
+			if now > doorOpen and now < lightOff:
+				GPIO.output(LIGHTS, RUN)
+			else:
+				GPIO.output(LIGHTS, STOP)
+
+		# Manual Door Open
+		if GPIO.input(MAN_UP) and not GPIO.input(UP_PROX):
+			GPIO.output(DOOR_UP, RUN) # Motor FWD
+			GPIO.output(DOOR_LOCK, RUN) # Door Lock
+			doorManualUp = True
+			doorStatus = 'Unknown'
+		if GPIO.input(MAN_UP) and GPIO.input(UP_PROX):
+			GPIO.output(DOOR_UP, STOP) # Motor FWD
+			GPIO.output(DOOR_LOCK, STOP) # Door Lock
+			doorStatus = 'Up     '
+		if not GPIO.input(MAN_UP) and doorManualUp:
+			GPIO.output(DOOR_UP, STOP) # Motor FWD
+			GPIO.output(DOOR_LOCK, STOP) # Door Lock
+			doorManualUp = False
+
+		# Manual Door Close
+		if GPIO.input(MAN_DOWN) and not GPIO.input(DOWN_PROX):
+			GPIO.output(DOOR_DOWN, RUN) # Motor REV
+			GPIO.output(DOOR_LOCK, RUN) # Door Lock
+			doorManualDown = True
+			doorStatus = 'Unknown'
+		if GPIO.input(MAN_DOWN) and GPIO.input(DOWN_PROX):
+			GPIO.output(DOOR_DOWN, STOP)
+			GPIO.output(DOOR_LOCK, STOP)
+			doorStatus = 'Down   '
+		if not GPIO.input(MAN_DOWN) and doorManualDown:
+			GPIO.output(DOOR_DOWN, STOP)
+			GPIO.output(DOOR_LOCK, STOP)
+			doorManualDown = False
+
+		# Manual Lights
+		if GPIO.input(MAN_LIGHT):
+			GPIO.output(LIGHTS, RUN)
+			lightManualOn = True
+		if not GPIO.input(MAN_LIGHT) and lightManualOn:
+			GPIO.output(LIGHTS, STOP)
+			lightManualOn = False
+
+		schedule.run_pending()
+		time.sleep(.1)
+
+except KeyboardInterrupt:
+	# here you put any code you want to run before the program
+	# exits when you press CTRL+C
+	print('\nKeyBoard Interrupt')
+
+except Exception as e:
+	# this covers all other exceptions
+	print(str(e))
+
+finally:
+	GPIO.cleanup() # this ensures a clean exit

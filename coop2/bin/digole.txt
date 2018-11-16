@@ -1,0 +1,53 @@
+clear the screen
+i2c.write_block_data(addr, 0x00, [0x43, 0x4c])
+
+set forground color to white
+i2c.write_block_data(addr, 0x00, [0x53, 0x43, 0xFF])
+red
+i2c.write_block_data(addr, 0x00, [0x53, 0x43, 0xE0])
+i2c.write_block_data(addr, 0x00, [0x53, 0x43, 0xE6])
+
+
+turn the curser on and off
+i2c.write_block_data(addr, 0x00, [0x43,0x53, 0x31])
+i2c.write_block_data(addr, 0x00, [0x43,0x53, 0x30])
+
+write TEST to current screen position
+i2c.write_block_data(addr, 0x00, [0x54, 0x54, 0x54, 0x45, 0x53, 0x54])
+
+Command: ETO, follow by x,y value in pixels, the range of x,y value is -127~127,
+it adjust the current position with the relative value.
+eg.: if current position is 46, 30, and the x=-10, y=5. after run this command, the new position is:36,35.
+i2c.write_block_data(addr, 0x00, [0x45, 0x54, 0x4f, 0,10])
+
+C ommand: TP. follow by x,y position, the x,y value is not refer to pixels, they
+a re the column and row value that MCU calculated based on the font’s size
+(usuall use space size to calculate current font’s size).
+   he top-left position is: 0,0.
+                                        
+ i2c.write_block_data(addr, 0x00, [0x54, 0x50, 0, 8])
+ 
+Command: TT. following with characters until value 0 received, the value 0 also
+is the terminator of a regular string. This command display a giving string on
+the current position, the position adjusted automatically, if the position reach
+the most right of screen, it move to the beginning of next line of character,
+the module can calculate the next character line according the current using
+font’s size. The value 10 and 13 (\n and \r in C, LF and CR in ASCII table) can
+move the current position, value 10 move to next line, value 13 move to the
+beginning of current line, use 10 and 13 move to the beginning of next line.
+eg.:
+“TTHello\nDigole” output on screen:
+Hello
+Digole
+“TTHello\n\rDigole” output on screen:
+i2c.write_block_data(addr, 0x00, [0x54, 0x54, 0x54, 0x45, 0x53, 0x54])
+
+i2c.write_block_data(addr, 0x00, [67, 76])
+>>> ord('T')
+84
+>>> s = 'Testing a string'
+>>> ', '.join(hex(ord(c)) for c in s)
+'0x54, 0x65, 0x73, 0x74, 0x69, 0x6e, 0x67, 0x20, 0x61, 0x20, 0x73, 0x74, 0x72, 0x69, 0x6e, 0x67'
+>>> i2c.write_block_data(addr, 0x00, [0x43,0x53, 0x30])
+>>> i2c.write_block_data(addr, 0x00, [0x54, 0x54,0x54, 0x65, 0x73, 0x74, 0x69, 0x6e, 0x67, 0x20, 0x61, 0x20, 0x73, 0x74, 0x72, 0x69, 0x6e, 0x67])
+

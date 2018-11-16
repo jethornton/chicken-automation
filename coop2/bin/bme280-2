@@ -1,0 +1,22 @@
+#!/usr/bin/env python
+
+import smbus2
+import bme280
+
+import platform
+
+print(platform.python_version())
+
+port = 1
+address = 0x76
+bus = smbus2.SMBus(port)
+data = bme280.sample(bus, address)
+print(data.id)
+print(data.timestamp)
+print(data.temperature)
+print(data.pressure)
+print(data.humidity)
+print(data)
+
+
+

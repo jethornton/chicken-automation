@@ -1,0 +1,42 @@
+#!/usr/bin/env python
+
+# GPIO.VERSION '0.6.3'
+# GPIO.RPI_REVISION 3
+
+import RPi.GPIO as GPIO
+import schedule
+#import astral
+import time
+import smbus2
+import bme280
+
+#setup BME280
+port = 1
+address = 0x76
+bus = smbus2.SMBus(port)
+calibration_params = bme280.load_calibration_params(bus, address)
+print('BME280 setup')
+
+def main():
+	schedule.every(10).seconds.do(bme280)
+	#schedule.every(1).minutes.do(status)
+	#schedule.every(15).minutes.do(weather)
+	#schedule.every().hour.do(weather)
+	#schedule.every().day.at("02:00").do(update)
+
+	while 1:
+		schedule.run_pending()
+		time.sleep(1)
+
+def bme280():
+	data = bme280.sample(bus, address, calibration_params)
+	print(data.id)
+	print(data.timestamp)
+	print(data.temperature)
+	print(data.pressure)
+	print(data.humidity)
+	print(data)
+
+
+main()
+

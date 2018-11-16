@@ -1,0 +1,324 @@
+#!/usr/bin/env python
+
+# GPIO.VERSION '0.6.3'
+# Raspberry Pi 3 Model B Rev 1.2
+
+import RPi.GPIO as GPIO
+import schedule
+import astral
+import datetime
+from pytz import timezone
+import time
+import os
+from luma.core.interface.serial import i2c
+from luma.core.render import canvas
+from luma.oled.device import sh1106
+
+# setup the OLED
+serial = i2c(port=1, address=0x3C)
+device = sh1106(serial)
+
+GPIO.setmode(GPIO.BCM)
+GPIO.setwarnings(False)
+GPIO.setup(4, GPIO.OUT) # Motor FWD
+GPIO.output(4, False)
+GPIO.setup(5, GPIO.OUT) # Motor REV
+GPIO.output(5, False)
+GPIO.setup(6, GPIO.OUT) # Door Lock
+GPIO.output(6, False)
+GPIO.setup(7, GPIO.OUT) # Lights
+GPIO.output(7, False)
+GPIO.setup(22, GPIO.IN,pull_up_down=GPIO.PUD_DOWN) # Manual Up Door Switch
+GPIO.setup(23, GPIO.IN,pull_up_down=GPIO.PUD_DOWN) # Manual Down Door Switch
+GPIO.setup(24, GPIO.IN,pull_up_down=GPIO.PUD_DOWN) # Manual Light Switch
+GPIO.setup(26, GPIO.IN,pull_up_down=GPIO.PUD_DOWN) # Door Up Switch
+GPIO.setup(27, GPIO.IN,pull_up_down=GPIO.PUD_DOWN) # Door Down Switch
+
+"""
+# test for an internet connection so NTP time is verified
+hostname = "google.com"
+response = os.system("ping -c 1 " + hostname)
+
+#and then check the response...
+if response == 0:
+	print hostname, 'is up!'
+	GPIO.output(7, True)
+	time.sleep(5)
+	GPIO.output(7, False)
+	time.sleep(2)
+	GPIO.output(7, True)
+	time.sleep(2)
+	GPIO.output(7, False)
+else:
+	print hostname, 'is down!'
+	exit()
+"""
+# Construct our location.  Longitude west and latitude south are negative
+coordinates = ["Poplar Bluff", "USA", 36.763084, -90.413871, "US/Central", 110]
+pbmo = astral.Location(info=(coordinates))
+pbmo.solar_depression = "civil"
+
+egglight = 840 #840 # minutes of daylight desired
+timeformat = "%I:%M %p"
+
+dawn = timezone('US/Central').localize(datetime.datetime.now())
+sunrise = timezone('US/Central').localize(datetime.datetime.now())
+sunset = timezone('US/Central').localize(datetime.datetime.now())
+dusk = timezone('US/Central').localize(datetime.datetime.now())
+lighton = timezone('US/Central').localize(datetime.datetime.now())
+now = timezone('US/Central').localize(datetime.datetime.now())
+lights = False
+runtime = 0
+
+htmlcontents = ''' <!DOCTYPE html>
+<html lang="en">
+	<head>
+		<meta charset="utf-8">
+		<meta http-equiv="refresh" content="15" >
+		<title>Chicken</title>
+	</head>
+	<body>
+		<p>{}</P>
+		<p>Dawn {}</p>
+		<p>Sunrise {}</p>
+		<p>Sunset {}</p>
+		<p>Dusk {}</p>
+		<p>Daylight {}</p>
+		<p>Extra Light {}</p>
+		<p>Door Opens at {}</p>
+		<p>Door Closes at {}</p>
+		<p>Door is {}</p>
+		<p>Lights are {}</p>
+	</body>
+</html>
+'''
+
+def update():
+	global dawn
+	global sunrise
+	global sunset
+	global lighton
+	global dooropen
+	global dusk
+	global daylight
+	global lights
+	global runtime
+	dawn = pbmo.dawn(datetime.date.today())
+	sunrise = pbmo.sunrise(datetime.date.today())
+	sunset = pbmo.sunset(datetime.date.today())
+	dusk = pbmo.dusk(datetime.date.today())
+	daylight = sunset - sunrise
+
+	# amount of daylight in HH:MM:SS
+	daylight = sunset - sunrise
+	print "Daylight {}".format(daylight)
+
+	lightmin = daylight.seconds / 60
+	if egglight > lightmin:
+		extralightminutes = egglight - lightmin
+		lighton = sunrise - datetime.timedelta(minutes=extralightminutes)
+		dooropen = lighton
+		lights = True
+		print "Lights On {} and Door Opens".format(lighton.strftime(timeformat))
+		print "Sunrise {}".format(sunrise.strftime(timeformat))
+	else:
+		lights = False
+		dooropen = sunrise.strftime(timeformat)
+		print "Sunrise {} and Door Opens".format(sunrise.strftime(timeformat))
+
+	print "Sunset {}".format(sunset.strftime(timeformat))
+	print "Dusk {} and Door Closes".format(dusk.strftime(timeformat))
+	# print os.getegid()
+
+def status():
+	global dawn
+	global sunrise
+	global sunset
+	global lighton
+	global dooropen
+	global dusk
+	global daylight
+	global lights
+	global runtime
+	global htmlcontents
+	door = "Unknown"
+	light = "Off"
+	now = timezone('US/Central').localize(datetime.datetime.now())
+	#print now.tzinfo
+	#print lighton.tzinfo
+	#print(datetime.datetime.now().strftime("%H:%M"))
+	#print lighton < now
+	#print now < sunrise
+	#print now > sunrise
+	#print now < lighton
+	#print now > sunset
+
+	if not GPIO.input(24): # Manual Light Switch
+		if lights and lighton < now and now < sunrise:
+			GPIO.output(7, True) # Lights
+
+		if GPIO.input(7):
+			light = "On"
+
+		if now > sunrise:
+			GPIO.output(7, False) # Lights
+
+	if lights:
+		if lighton < now and now < dusk:
+			if not GPIO.input(26) and runtime < 60: # Up Door Switch
+				print "The door is opening"
+				GPIO.output(4, True) # Motor FWD
+				GPIO.output(6, True) # Door Lock
+
+		if now < lighton or now > dusk:
+			if not GPIO.input(27) and runtime < 60: # Down Door Switch
+				print "The door is closing"
+				GPIO.output(5, True) # Motor REV
+				GPIO.output(6, True) # Door Lock
+
+	if not lights:
+		if sunrise < now and now < dusk:
+			if not GPIO.input(26) and runtime < 60: # Up Door Switch
+				print "The door is opening"
+				GPIO.output(4, True) # Motor FWD
+				GPIO.output(6, True) # Door Lock
+
+		if now < sunrise or now > dusk:
+			if not GPIO.input(27) and runtime < 60: # Down Door Switch
+				print "The door is closing"
+				GPIO.output(5, True) # Motor REV
+				GPIO.output(6, True) # Door Lock
+
+	if GPIO.input(26): # Up Door Switch
+		door = "Open"
+
+	if GPIO.input(27): # Down Door Switch
+		door = "Closed"
+
+	print"{} Light is {}, Door is {} {}".format(now.strftime("%H:%M"), light, door, runtime)
+
+	# Update the web page need to know if lighton is before sunrise
+	output = open("/var/www/html/chicken.html","w")
+	output.write(htmlcontents.format(now.strftime("%b %d %Y %I:%M %p"),
+		dawn.strftime(timeformat),
+		sunrise.strftime(timeformat),
+		sunset.strftime(timeformat),
+		dusk.strftime(timeformat),
+		daylight,
+		lights,
+		dooropen,
+		dusk.strftime(timeformat),
+		door,
+		light))
+	#output.write(contents.format(datetime.now().time().strftime(timeformat)))
+	output.close()
+
+	# Update the webcam Video Capture 1280 x 1024 @ 30 fps
+	# 1024 x 800
+	# os.system("fswebcam -r 800x600 /var/www/html/coop.jpg")
+
+
+def motor(): # monitor the motor when moving
+	pass
+
+update()
+
+if not GPIO.input(22) and not GPIO.input(23): # Auto Door Mode
+	status()
+
+schedule.every(1).minutes.do(status)
+#schedule.every().hour.do(update)
+schedule.every().day.at("02:00").do(update)
+
+try:
+	while True:
+		if GPIO.input(22) or GPIO.input(23): # Manual Door Mode
+			manual = True
+		if not GPIO.input(22) and not GPIO.input(23): # Auto Door Mode
+			manual = False
+
+		if not manual:
+			schedule.run_pending()
+
+		if manual:
+			if GPIO.input(22) and not GPIO.input(26):
+				GPIO.output(4, True) # Motor FWD
+				GPIO.output(6, True) # Door Lock
+			if GPIO.input(22) and GPIO.input(26):
+				GPIO.output(4, False) # Motor FWD
+				GPIO.output(6, False) # Door Lock
+				#print "Manual Door Up"
+			if GPIO.input(23) and not GPIO.input(27):
+				GPIO.output(5, True) # Motor REV
+				GPIO.output(6, True) # Door Lock
+			if GPIO.input(23) and GPIO.input(27):
+				GPIO.output(5, False) # Motor REV
+				GPIO.output(6, False) # Door Lock
+				#print "Manual Door Down"
+
+		#Manual lights
+		manual_light = False
+		if GPIO.input(24):
+			manual_light = True
+			GPIO.output(7, True) # Lights
+		if not GPIO.input(24) and manual_light:
+			manual_light = False
+			GPIO.output(7, False) # Lights
+
+		if GPIO.input(6): # the door lock is on meaning the door is moving
+			runtime += 1
+			#print runtime
+
+		if runtime >= 90:
+			GPIO.output(4, False) # Motor FWD
+			GPIO.output(5, False) # Motor REV
+			GPIO.output(6, False) # Door Lock
+
+		if GPIO.input(4) and GPIO.input(26): # Motor FWD and Up Door Switch
+			GPIO.output(4, False) # Motor FWD
+			GPIO.output(6, False) # Door Lock
+			runtime = 0
+
+		if GPIO.input(5) and GPIO.input(27): # Motor REV and Down Door Switch
+			GPIO.output(5, False) # Motor REV
+			GPIO.output(6, False) # Door Lock
+			runtime = 0
+
+		if not GPIO.input(4) and not GPIO.input(5) and not GPIO.input(6):
+			if GPIO.input(26) or GPIO.input(27):
+				runtime = 0
+
+		if GPIO.input(26):
+			door_status = "Open"
+		if GPIO.input(27):
+			door_status = "Closed"
+		if not GPIO.input(26) and not GPIO.input(27):
+			door_status = "Unknown"
+
+		# Update the light status by reading the output
+		if GPIO.input(7): # Lights
+			light_status = "On"
+		if not GPIO.input(7):
+			light_status = "Off"
+
+		now = timezone('US/Central').localize(datetime.datetime.now())
+
+		with canvas(device) as draw:
+			draw.rectangle(device.bounding_box, outline="white", fill="black")
+			draw.text((10, 5), "Door Status {}".format(door_status), fill="white")
+			draw.text((10, 15), "Lights are {}".format(light_status), fill="white")
+			draw.text((10, 25), "{}".format(now.strftime("%b %d %y %H:%M:%S")), fill="white")
+
+		time.sleep(1)
+
+except KeyboardInterrupt:
+	# here you put any code you want to run before the program
+	# exits when you press CTRL+C
+	print "\nKeyBoard Interrupt"
+
+except Exception,e:
+	# this covers all other exceptions
+	print str(e)
+
+finally:
+	GPIO.cleanup() # this ensures a clean exit

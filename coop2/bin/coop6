@@ -1,0 +1,148 @@
+#!/usr/bin/env python3
+
+import sys
+from datetime import datetime, timedelta
+import pytz
+import astral
+
+"""
+Summer and Fall is the same test
+If natural daylight is more than 10h and decreasing
+	Open door and turn on lights at dawn
+
+Winter Test
+If natural daylight is less than 10h and decreasing
+	Find the last date of 10h daylight
+		Add 5 minutes per day from that date
+
+Spring Test
+If natural daylight is less than 10h and increasing
+	Find the last date of 10h of daylight with daylight decreasing
+		Add 5 minutes per day from that date
+"""
+
+localTz = 'US/Central'
+centralTz = pytz.timezone('US/Central')
+dateFormat = '%b %d %Y'
+timeFormat = '%I:%M %p'
+extraLight = 60 # extra light after sunrise
+addLight = 5 # how many minutes per day to add light
+totalLight = 840 # minutes of total light up to summer
+minLight = 600 # minutes of natural light to start adding light
+
+# coordinates = ['City', 'Country', 'latitude', longitude', 'timezone', 'elevation']
+coordinates = ["Poplar Bluff", "USA", 36.763084, -90.413871, localTz, 110]
+pbmo = astral.Location(info=(coordinates))
+pbmo.solar_depression = "civil"
+
+
+if len(sys.argv) == 1:
+	test = input('Pick Test 1, 2, 3 or 4 ')
+
+if len(sys.argv) > 1:
+	test = sys.argv[1]
+
+if test == '1':
+	# Summer
+	# test if natural daylight is greater than 14h
+	testName = 'Summer'
+	today = centralTz.localize(datetime(2018, 7, 17))
+
+elif test == '2':
+	# Fall
+	# test if natural daylight is less than 14h, more than 10h and decreasing
+	testName = 'Fall'
+	today = centralTz.localize(datetime(2018, 8, 17))
+
+elif test == '3':
+	# Winter
+	# test if natural daylight is less than 10h and decreasing
+	testName = 'Winter'
+	today = centralTz.localize(datetime(2018, 12, 17))
+
+elif test == '4':
+	# Spring
+	# test if natural daylight is less than 14h and increasing
+	testName = 'Spring'
+	today = centralTz.localize(datetime(2019, 1, 4))
+
+else:
+	print('You gotta pick one test lol')
+
+print('{} Test Seed Date {}'.format(testName, today.strftime(dateFormat)))
+
+# start the test
+todayEvents = pbmo.sun(today)
+todayDawn = todayEvents['dawn']
+todaySunrise = todayEvents['sunrise']
+todaySunset = todayEvents['sunset']
+todayDusk = todayEvents['dusk']
+todayLight = (todaySunset - todaySunrise).total_seconds()
+
+print('Natural Light Today is {}'.format(str(timedelta(seconds=todayLight))))
+print('Dawn Today is {}'.format(todayDawn.strftime(timeFormat)))
+print('Dusk Today is {}'.format(todayDusk.strftime(timeFormat)))
+
+yesterday = today - timedelta(days = 1)
+yesterdayEvents = pbmo.sun(yesterday)
+yesterdaySunrise = yesterdayEvents['sunrise']
+yesterdaySunset = yesterdayEvents['sunset']
+yesterdayDaylight = ((yesterdaySunset - yesterdaySunrise).total_seconds())
+
+# test 1 and 2 daylight is more than 10h and decreasing
+if todayLight > (minLight * 60) and yesterdayDaylight > todayLight:
+	doorOpen = todayDawn
+	totalLight = todayLight
+
+# test 3 daylight is less than 10h and decreasing
+if todayLight < (minLight * 60) and yesterdayDaylight > todayLight:
+	i = 1
+	testDaylight = 0
+	while testDaylight < (minLight * 60):
+		daylightTestDate = today - timedelta(days = i)
+		testEvents = pbmo.sun(daylightTestDate)
+		testSunrise = testEvents['sunrise']
+		testSunset = testEvents['sunset']
+		testDaylight = (testSunset - testSunrise).total_seconds()
+		i += 1
+		if i > 100:
+			print('WTF the while loop failed!')
+			break
+	days = (today - daylightTestDate).days
+	print('Last 10h Daylight was {} days ago'.format(days))
+	totalLight = todayLight + (days * (addLight * 60))
+	doorOpen = todayDusk - timedelta(seconds=totalLight)
+
+# test 4 daylight is less than 14h and increasing
+if todayLight < (totalLight * 60) and yesterdayDaylight < todayLight:
+	increasingLight = False
+	i = 1
+	lastTestDate = today
+	while not increasingLight:
+		currentTestDate = today - timedelta(days = i)
+		events = pbmo.sun(currentTestDate)
+		currentLight = int(((events['sunset'] - events['sunrise']).total_seconds()))
+		lastEvents = pbmo.sun(lastTestDate)
+		lastLight = int(((lastEvents['sunset'] - lastEvents['sunrise']).total_seconds()))
+		if currentLight > lastLight and currentLight > 36000:
+			days = (today - currentTestDate).days
+			totalLight = todayLight + (days * (addLight * 60))
+			doorOpen = todayDusk - timedelta(seconds=totalLight)
+			print('Light Start Date is {}, {} days ago'.format(currentTestDate.strftime(dateFormat), days))
+			break
+		i += 1
+		lastTestDate = currentTestDate
+		if i > 60:
+			print('WTF the while loop failed!')
+			break
+
+print('Door Opens at {}'.format(doorOpen.strftime(timeFormat)))
+print('Light On at {}'.format(doorOpen.strftime(timeFormat)))
+print('Total Light Today {}'.format(str(timedelta(seconds=totalLight))))
+
+lightOff = todaySunrise + timedelta(minutes=extraLight)
+print('Light Off at {}'.format(lightOff.strftime(timeFormat)))
+print('Door Closes at {}'.format(todayDusk.strftime(timeFormat)))
+
+
+

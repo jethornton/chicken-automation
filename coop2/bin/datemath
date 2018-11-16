@@ -1,0 +1,48 @@
+#!/usr/bin/env python3
+
+from datetime import datetime, timedelta
+import pytz
+import astral
+
+localTz = 'US/Central'
+dateFormat = '%b %d %Y'
+timeFormat = '%I:%M %p'
+
+coordinates = ["Poplar Bluff", "USA", 36.763084, -90.413871, localTz, 110]
+pbmo = astral.Location(info=(coordinates))
+pbmo.solar_depression = "civil"
+events = pbmo.sun(datetime.now(pytz.timezone(localTz)))
+dawn = events['dawn']
+sunrise = events['sunrise']
+sunset = events['sunset']
+dusk = events['dusk']
+now = datetime.now(pytz.timezone(localTz))
+#print('Today Date {}'.format(now.strftime(dateFormat)))
+#print('Inital Door Open == {}'.format(now > dawn and now < dusk))
+#print('Dawn {}'.format(dawn.strftime(timeFormat)))
+#print('Sunrise {}'.format(sunrise.strftime(timeFormat)))
+#print('Now {}'.format(now.strftime(timeFormat)))
+#print('Sunset {}'.format(sunset.strftime(timeFormat)))
+#print('Dusk {}'.format(dusk.strftime(timeFormat)))
+
+localTz = 'US/Central'
+centralTz = pytz.timezone('US/Central')
+
+lightdate = centralTz.localize(datetime(2018, 9, 23))
+
+today = datetime.now(pytz.timezone(localTz))
+
+if lightdate < today:
+	days = (today - lightdate).days
+	extra_time = days * 5
+	total_time = 700 + extra_time
+
+#print(lightdate)
+#print(today)
+#print(extra_time)
+print(total_time)
+print(sunrise)
+print(sunset)
+print(sunset - timedelta(minutes = total_time))
+
+

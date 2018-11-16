@@ -1,0 +1,65 @@
+
+doorTravelTime = time in seconds
+
+if door should be open:
+	closeStep = 0
+
+	if openStep == 0
+		doorStartTime = datetime.now().timestamp()
+		set outputs on
+		openStep = 1
+
+	if openStep == 1: test for door open or door time out
+		if doorOpenProx:
+			openStep = 2
+		doorCurrentTime = datetime.now().timestamp()
+		doorRunTime = doorCurrentTime - doorStartTime
+		if doorRunTime > doorTravelTime:
+			openStep = 3
+
+	if openStep > 1:
+		turn off outputs
+
+	if openStep == 2:
+		doorIsOpen = True
+
+	if openStep == 3:
+		doorTimeOut = True
+
+else: # the door should be closed
+	openStep = 0
+
+	if closeStep == 0:
+...
+
+*****
+doorTravelTime = some time in seconds
+
+if time to open door and not openDoor
+	openDoor = True
+	doorStartTime = datetime.now().timestamp()
+
+if openDoor and not doorIsOpening
+	set outputs on
+	doorIsOpening = True
+
+if doorIsOpening and doorUpProx and not doorTimeOut
+	set outputs off
+	doorIsOpen = True
+
+if doorIsOpening and not doorUpProx
+	doorCurrentTime = datetime.now().timestamp()
+	doorRunTime = doorCurrentTime - doorStartTime
+	if doorRunTime > doorTravelTime
+		doorTimeOut = True
+
+
+****
+
+if time to open the door and not open or timed out
+	start timer
+	turn on outputs
+
+if door is opening and not open or timed out seems redundant
+
+****

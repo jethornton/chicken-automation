@@ -1,0 +1,270 @@
+#!/usr/bin/env python3
+
+import RPi.GPIO as GPIO
+import schedule
+import astral
+import time
+import smbus2
+import bme280
+from datetime import date, timedelta, datetime
+from pytz import timezone
+from luma.core.render import canvas
+from luma.oled.device import sh1106
+from luma.core.interface.serial import i2c
+
+# basackwards relay setup
+run = False
+stop = True
+
+# setup I/O Constants
+DOOR_UP = 4
+DOOR_DOWN = 5
+DOOR_LOCK = 6
+LIGHTS = 7
+MAN_UP = 22
+MAN_DOWN = 23
+MAN_LIGHT = 24
+UP_PROX = 26
+DOWN_PROX = 27
+
+# setup I/O
+GPIO.setmode(GPIO.BCM)
+GPIO.setwarnings(False)
+GPIO.setup(DOOR_UP, GPIO.OUT) # Motor FWD
+GPIO.output(DOOR_UP, stop)
+GPIO.setup(DOOR_DOWN, GPIO.OUT) # Motor REV
+GPIO.output(DOOR_DOWN, stop)
+GPIO.setup(DOOR_LOCK, GPIO.OUT) # Door Lock
+GPIO.output(DOOR_LOCK, stop)
+GPIO.setup(LIGHTS, GPIO.OUT) # Lights
+GPIO.output(LIGHTS, stop)
+GPIO.setup(MAN_UP, GPIO.IN,pull_up_down=GPIO.PUD_DOWN) # Manual Up Switch
+GPIO.setup(MAN_DOWN, GPIO.IN,pull_up_down=GPIO.PUD_DOWN) # Manual Down Switch
+GPIO.setup(MAN_LIGHT, GPIO.IN,pull_up_down=GPIO.PUD_DOWN) # Manual Light Switch
+GPIO.setup(UP_PROX, GPIO.IN,pull_up_down=GPIO.PUD_DOWN) # Door Up Switch
+GPIO.setup(DOWN_PROX, GPIO.IN,pull_up_down=GPIO.PUD_DOWN) # Door Down Switch
+
+#setup BME280
+port = 1
+address = 0x76
+bus = smbus2.SMBus(port)
+calibration_params = bme280.load_calibration_params(bus, address)
+
+# setup the OLED
+serial = i2c(port=1, address=0x3C)
+device = sh1106(serial)
+
+# Construct our location.  Longitude west and latitude south are negative
+coordinates = ["Poplar Bluff", "USA", 36.763084, -90.413871, "US/Central", 110]
+pbmo = astral.Location(info=(coordinates))
+pbmo.solar_depression = "civil"
+timeFormat = "%I:%M %p"
+dateFormat = "%b %d %Y %I:%M %p" 
+
+doorStartTime = 0
+doorRunTime = 0
+doorTimeOut = False
+
+# initalize some flags
+doorManualUp = False
+doorManualDown = False
+doorStatus = 'Unknown'
+
+# initalize some global variables
+dawn = pbmo.dawn().timestamp()
+sunrise = pbmo.sunrise().timestamp()
+sunset = pbmo.sunset().timestamp()
+dusk = pbmo.dusk().timestamp()
+now = datetime.now().timestamp()
+local_tz = timezone('US/Central')
+dawnTime = datetime.fromtimestamp(dawn, local_tz).strftime(timeFormat)
+sunriseTime = datetime.fromtimestamp(sunrise, local_tz).strftime(timeFormat)
+sunsetTime = datetime.fromtimestamp(sunset, local_tz).strftime(timeFormat)
+duskTime = datetime.fromtimestamp(dusk, local_tz).strftime(timeFormat)
+print('{}'.format(sunset - sunrise))
+dayHours = str((sunset - sunrise) / 3600).split('.')[0]
+print(dayHours)
+dayMinutes = (sunset - sunrise) % 60
+print(dayMinutes)
+#dayTime = '{0:.0f}:{1:.0f}'.format(dayHours, dayMinutes)
+#print(dayTime)
+
+print('Dawn {:.0f}'.format(dawn))
+print('Now  {:.0f}'.format(now))
+#print('Sunrise {}'.format(sunriseTime))
+#print('Sunset {}'.format(sunsetTime))
+print('Dusk {:.0f}'.format(dusk))
+print(now > dawn)
+print(now < dusk)
+
+content = """
+<!DOCTYPE html>
+<html lang="en">
+	<head>
+		<meta charset="utf-8">
+		<title>Chicken 2</title>
+		<meta http-equiv="refresh" content="5">
+	</head>
+	<body>
+		<p>{time}</p>
+		<p>Dawn {dawn}</p>
+		<p>Sunrise {sunrise}</p>
+		<p>Sunset {sunset}</p>
+		<p>Dusk {dusk}</p>
+		<p>Daylight {daylight}</p>
+		<p>Door = {door}</p>
+		<p>Door Run Time = {doorruntime:0.0f}, Door Time Out = {doortimeout}</p>
+		<p>Up Prox = {upprox}, Down Prox = {downprox}</p>
+	</body>
+</html>
+"""
+
+def update():
+	dawn = pbmo.dawn().timestamp()
+	sunrise = pbmo.sunrise().timestamp()
+	sunset = pbmo.sunset().timestamp()
+	dusk = pbmo.dusk().timestamp()
+	now = datetime.now().timestamp()
+	dawnTime = datetime.fromtimestamp(dawn, local_tz).strftime(timeFormat)
+	sunriseTime = datetime.fromtimestamp(sunrise, local_tz).strftime(timeFormat)
+	sunsetTime = datetime.fromtimestamp(sunset, local_tz).strftime(timeFormat)
+	duskTime = datetime.fromtimestamp(dusk, local_tz).strftime(timeFormat)
+	dayHours = (sunset - sunrise) / 3600
+	dayMinutes = (sunset - sunrise) % 3600
+	#dayTime = '{0:d}:{}'.format(dayHours, dayMinutes)
+	#print(dayTime)
+
+def status():
+	data = bme280.sample(bus, address, calibration_params)
+	temperature = round((data.temperature * 1.8) + 32, 1)
+	humidity = round(data.humidity, 1)
+	pressure = round(data.pressure, 1)
+	now = datetime.now().timestamp()
+	nowTime = datetime.fromtimestamp(now, local_tz).strftime(timeFormat)
+	doorOpen = (now > dawn and now < dusk)
+	doorClose = (now < dawn) or (now > dusk and now < dawn)
+	print('{}F {}%RH {}hPa {} Open = {} Close = {}'.format(temperature, humidity,
+		pressure, nowTime, doorOpen, doorClose))
+
+	fields = {'time' : nowTime,
+	'dawn' : dawnTime,
+	'sunrise' : sunriseTime,
+	'sunset' : sunsetTime,
+	'dusk' : duskTime,
+	'daylight' : dayTime,
+	'door' : doorStatus,
+	'doorruntime' : doorRunTime,
+	'doortimeout' : doorTimeOut,
+	'upprox' : GPIO.input(UP_PROX),
+	'downprox' : GPIO.input(DOWN_PROX),
+	}
+
+	with open('/var/www/html/chick.html', 'w') as html:
+		html.write(content.format(**fields))
+	
+
+schedule.every(1).minutes.do(status)
+#schedule.every(5).seconds.do(status)
+schedule.every().day.at("02:00").do(update)
+
+try:
+	while True:
+		# manual Door Up
+		if GPIO.input(MAN_UP) or GPIO.input(MAN_DOWN):
+			doorRunTime = 0
+			doorTimeOut = False
+		if GPIO.input(MAN_UP) and not GPIO.input(UP_PROX):
+			GPIO.output(DOOR_UP, run) # Motor FWD
+			GPIO.output(DOOR_LOCK, run) # Door Lock
+			doorManualUp = True
+		if GPIO.input(MAN_UP) and GPIO.input(UP_PROX):
+			GPIO.output(DOOR_UP, stop) # Motor FWD
+			GPIO.output(DOOR_LOCK, stop) # Door Lock
+		if not GPIO.input(MAN_UP) and doorManualUp:
+			GPIO.output(DOOR_UP, stop) # Motor FWD
+			GPIO.output(DOOR_LOCK, stop) # Door Lock
+			doorManualUp = False
+
+		# manual Door Down
+		if GPIO.input(MAN_DOWN) and not GPIO.input(DOWN_PROX):
+			GPIO.output(DOOR_DOWN, run) # Motor REV
+			GPIO.output(DOOR_LOCK, run) # Door Lock
+			doorManualDown = True
+		if GPIO.input(MAN_DOWN) and GPIO.input(DOWN_PROX):
+			GPIO.output(DOOR_DOWN, stop)
+			GPIO.output(DOOR_LOCK, stop)
+		if not GPIO.input(MAN_DOWN) and doorManualDown:
+			GPIO.output(DOOR_DOWN, stop)
+			GPIO.output(DOOR_LOCK, stop)
+			doorManualDown = False
+
+		now = datetime.now().timestamp()
+		# Lights
+		if GPIO.input(MAN_LIGHT):
+			GPIO.output(LIGHTS, run)
+		else:
+			if now >= dawn and now <= (sunrise + 900):
+				GPIO.output(LIGHTS, run)
+			else:
+				GPIO.output(LIGHTS, stop)
+
+		#print(now > dawn and now < dusk)
+		#print(now > dusk and now < dawn)
+
+		# auto Door Up
+		if not GPIO.input(MAN_DOWN) and not GPIO.input(MAN_UP) and not doorTimeOut:
+			if now > dawn and now < dusk:
+				if not doorStartTime: doorStartTime = time.time()
+				if not GPIO.input(UP_PROX) and not doorTimeOut:
+					GPIO.output(DOOR_UP, run)
+					GPIO.output(DOOR_LOCK, run)
+					doorRunTime = time.time() - doorStartTime
+					if doorRunTime > 180: doorTimeOut = True
+				if doorTimeOut:
+					GPIO.output(DOOR_UP, stop)
+					GPIO.output(DOOR_LOCK, stop)
+					doorStatus = 'Stuck'
+				if GPIO.input(UP_PROX):
+					GPIO.output(DOOR_UP, stop)
+					GPIO.output(DOOR_LOCK, stop)
+					doorTimer = 0
+					doorStatus = 'Up'
+
+			# auto Door Down
+			if (now < dawn) or (now > dusk):
+				if not doorStartTime: doorStartTime = time.time()
+				if not GPIO.input(DOWN_PROX) and not doorTimeOut:
+					GPIO.output(DOOR_DOWN, run)
+					GPIO.output(DOOR_LOCK, run)
+					doorRunTime = time.time() - doorStartTime
+					if doorRunTime > 180: doorTimeOut = True
+				if doorTimeOut:
+					GPIO.output(DOOR_DOWN, stop)
+					GPIO.output(DOOR_LOCK, stop)
+				if GPIO.input(DOWN_PROX):
+					GPIO.output(DOOR_DOWN, stop)
+					GPIO.output(DOOR_LOCK, stop)
+					doorTimer = 0
+					doorStatus = 'Down'
+			nowTime = datetime.fromtimestamp(now, local_tz).strftime(timeFormat)
+			with canvas(device) as draw:
+				draw.rectangle(device.bounding_box, outline="white", fill="black")
+				draw.text((5, 5), "Door Status {}".format(doorStatus), fill="white")
+				#draw.text((10, 15), "Lights are {}".format(light_status), fill="white")
+				draw.text((5, 25), "{}".format(nowTime), fill="white")
+
+
+		schedule.run_pending()
+		time.sleep(.1)
+
+except KeyboardInterrupt:
+	# here you put any code you want to run before the program
+	# exits when you press CTRL+C
+	print('\nKeyBoard Interrupt')
+
+except Exception as e:
+	# this covers all other exceptions
+	print(str(e))
+
+finally:
+	GPIO.cleanup() # this ensures a clean exit

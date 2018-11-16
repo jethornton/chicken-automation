@@ -1,0 +1,17 @@
+<pcw_home> that is your conditionals should only look at filtered GPIO input data
+<jthornton> what do you mean by filtered GPIO input?
+<XXCoder> such tiny window of unhandled range (0, 10)
+<jthornton> XXCoder: yea need to drop off the last lt > 10 as I assume by then the switch has settled down
+<pcw_home> all gpio input go through a filter (count up when high count down when low) and only the filtered data is ever looked at
+<XXCoder> maybe make it if untrue then... if > 10 then... else ....
+<XXCoder> so you dont spam yourself with da lights is off!"
+<jthornton> pcw_home: I see now
+<pcw_home> since you have a .1 second loop count of 3 should be fine
+<pcw_home> count needs to be bounded at 0 and 3
+<pcw_home> when 3 report high
+<pcw_home> when 0 report low
+<XXCoder> pcw_home: I was wondering if could make it .05 second and keep lt values where it is so its now half second debounce?
+<pcw_home> this also provide noise rejection
+<XXCoder> or .01 second, making it 1/10 second debounce?
+<XXCoder> but that would be very fast loop so ehh
+<pcw_home> basically you should never make a decision on unfiltered data

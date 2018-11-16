@@ -1,0 +1,16 @@
+#!/usr/bin/env python3
+
+import schedule
+import time
+from datetime import datetime
+
+print('Schedule Test {}'.format(datetime.now().strftime('%b,%d %Y %I:%M%p')))
+
+def update():
+	print(datetime.now().strftime('%b,%d %Y %I:%M%p'))
+
+schedule.every().day.at('00:01').do(update)
+
+while True:
+	schedule.run_pending()
+	time.sleep(1)

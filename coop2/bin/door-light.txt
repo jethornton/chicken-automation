@@ -1,0 +1,65 @@
+November 22, 2018 natural daylight == 10h
+48 days later we are at 14h
+
+The rules at boot up
+
+Summer
+If natural daylight today is greater than 14h
+	Open door and turn on light at dawn
+
+Fall
+If natural daylight today is less than 14h and more than 10h and decreasing
+since yesterday
+	Open door and turn on light at dawn
+
+Winter
+If natural daylight today is less than 10h
+	Search backwards for first date with greater than 10h of daylight
+		Set that date as the start date of extra light
+
+Spring
+If natural daylight today is less than 14h and more than 10h and increasing
+since yesterday
+	Search backwards for first date that daylight is decreasing and greater than
+	10h of sunlight
+		Set that date as the start date of extra light
+
+
+"""
+	If daylight is decreasing find the last date of 10h daylight
+		Add 5 minutes per day from that date to extra light up to 14h
+	If daylight is increasing find the last date of last year with 10h of daylight
+		Add 5 minutes per day from that date up to 14h
+
+
+If natural daylight is decreasing when 10h is reached start adding 5 minutes per
+day extra light in the morning until 14h is reached then hold until natural
+daylight is greater than 14h.
+
+
+On Boot up
+
+Determine length of daylight
+If length of daylight is greater than total light
+	Open door and turn on light at dawn
+
+if length of daylight is less than minimum light
+	If daylight is increasing each day
+		????
+
+	if daylight is decreasing each day
+		if daylight is greater than 10h
+			Open door and turn on light at dawn
+
+		if daylight is less than 10h
+			Find previous date where daylight is 10h and set extra light date
+				Add 5 minutes per day up to today
+					Open door turn on lights at sunset - (daylight + added light)
+
+
+
+If now is greater than sunrise + extra light after sunrise
+	Turn lights off
+
+If now is greater than dusk
+	Close door

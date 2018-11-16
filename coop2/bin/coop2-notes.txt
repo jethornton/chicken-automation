@@ -1,0 +1,47 @@
+python3
+
+for better time update on bootup use rdate
+sudo apt-get install rdate
+
+sudo nano /etc/rc.local
+add the following line before exit 0
+rdate -s time.nist.gov
+
+for schedule
+pip3 install schedule
+
+for astral
+pip-3.2 install Astral
+
+for smbus2
+pip3 install smbus2
+
+for bme280
+wget https://github.com/rm-hull/bme280/tarball/0.2.2
+cd bme280
+sudo python3 setup.py install
+
+sudo raspi-config
+Interface Options
+I2C Enable
+
+to enable the web page
+sudo apt update
+sudo apt upgrade
+sudo apt update
+sudo apt install apache2
+sudo chown -R pi:www-data /var/www/html/
+sudo chmod -R 770 /var/www/html/
+192.168.1.60
+
+oled
+sudo -H pip install --upgrade luma.oled
+
+digole 168 x 120 lcd
+pip3 install Pillow
+pip3 install luma.lcd
+from luma.lcd.device import st7735
+
+
+Wiring
+

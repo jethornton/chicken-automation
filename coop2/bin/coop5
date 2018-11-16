@@ -1,0 +1,182 @@
+#!/usr/bin/env python3
+
+"""
+Summer Test
+If natural daylight is greater than 14h
+	Open door and turn on light at dawn
+
+Fall Test
+If natural daylight is less than 14h and more than 10h and decreasing
+	Open door and turn on light at dawn
+
+Winter Test
+If natural daylight is less than 10h and decreasing
+	Find the last date of 10h daylight
+		Add 5 minutes per day from that date
+
+Spring Test
+If natural daylight is less than 10h and increasing
+	Find the last date of 10h of daylight with daylight decreasing
+		Add 5 minutes per day from that date
+"""
+
+from datetime import datetime, timedelta
+import pytz
+import astral
+
+localTz = 'US/Central'
+centralTz = pytz.timezone('US/Central')
+dateFormat = '%b %d %Y'
+timeFormat = '%I:%M %p'
+extraLight = 60
+
+coordinates = ["Poplar Bluff", "USA", 36.763084, -90.413871, localTz, 110]
+pbmo = astral.Location(info=(coordinates))
+pbmo.solar_depression = "civil"
+
+
+# Summer
+# test if natural daylight is greater than 14h
+print('Summer Test')
+testDate = centralTz.localize(datetime(2018, 7, 17))
+events = pbmo.sun(testDate)
+sunrise = events['sunrise']
+sunset = events['sunset']
+
+daylight = int(((sunset - sunrise).total_seconds())/60)
+print('Test Date {}'.format(testDate.strftime(dateFormat)))
+
+if daylight >= 840:
+	print('More than 14 hours of natural daylight')
+	print('Natural Daylight {}'.format(str(timedelta(minutes=daylight))[:-3]))
+	print('Door Opens at sunrise {}\n'.format(sunrise.strftime(timeFormat)))
+else:
+	print('Less than 14 hours of natural daylight')
+
+# Fall
+# test if natural daylight is less than 14h, more than 10h and decreasing
+print('Fall Test')
+testDate = centralTz.localize(datetime(2018, 8, 17))
+events = pbmo.sun(testDate)
+sunrise = events['sunrise']
+sunset = events['sunset']
+
+todayDaylight = int(((sunset - sunrise).total_seconds())/60)
+print('Test Date {}'.format(testDate.strftime(dateFormat)))
+
+if todayDaylight < 840:
+	print('Less than 14 hours of natural daylight')
+	print('Natural Daylight {}'.format(str(timedelta(minutes=todayDaylight))[:-3]))
+	yesterday = testDate - timedelta(days = 1)
+	print('Yesterday was {}'.format(yesterday.strftime(dateFormat)))
+	yesterdayEvents = pbmo.sun(yesterday)
+	yesterdaySunrise = yesterdayEvents['sunrise']
+	yesterdaySunset = yesterdayEvents['sunset']
+	yesterdayDaylight = int(((yesterdaySunset - yesterdaySunrise).total_seconds())/60)
+	if todayDaylight < yesterdayDaylight:
+		print('Decreasing daylight')
+		if todayDaylight > 600:
+			print('Door Opens at sunrise {}\n'.format(sunrise.strftime(timeFormat)))
+	else:
+		print('Increasing daylight')
+
+# Winter
+# test if natural daylight is less than 10h and decreasing
+print('Winter Test')
+testDate = centralTz.localize(datetime(2018, 12, 17))
+events = pbmo.sun(testDate)
+dawn = events['dawn']
+sunrise = events['sunrise']
+sunset = events['sunset']
+dusk = events['dusk']
+todayDaylight = int(((sunset - sunrise).total_seconds())/60)
+print('Test Date {}'.format(testDate.strftime(dateFormat)))
+
+if todayDaylight < 600:
+	print('Natural Daylight {}'.format(str(timedelta(minutes=todayDaylight))[:-3]))
+	yesterday = testDate - timedelta(days = 1)
+	print('Yesterday was {}'.format(yesterday.strftime(dateFormat)))
+	yesterdayEvents = pbmo.sun(yesterday)
+	yesterdaySunrise = yesterdayEvents['sunrise']
+	yesterdaySunset = yesterdayEvents['sunset']
+	yesterdayDaylight = int(((yesterdaySunset - yesterdaySunrise).total_seconds())/60)
+	if todayDaylight < yesterdayDaylight:
+		print('Decreasing daylight')
+	else:
+		print('Increasing daylight')
+
+	i = 1
+	testDaylight = 0
+	while testDaylight < 600:
+		daylightTestDate = testDate - timedelta(days = i)
+		events = pbmo.sun(daylightTestDate)
+		testSunrise = events['sunrise']
+		testSunset = events['sunset']
+		testDaylight = int(((testSunset - testSunrise).total_seconds())/60)
+		i += 1
+		if i > 100:
+			print('wtf')
+			break
+	days = (testDate - daylightTestDate).days
+	print('Last 10h Daylight was {} days ago'.format(days))
+	totalLightTime = todayDaylight + (days * 5)
+	print('Total Light Time {}'.format(str(timedelta(minutes=totalLightTime))[:-3]))
+	print('10h Daylight Date {}'.format(daylightTestDate.strftime(dateFormat)))
+	print('Test Daylight {}'.format(str(timedelta(minutes=testDaylight))[:-3]))
+	openDoor = dusk - timedelta(minutes=totalLightTime)
+	print('Dawn {}'.format(dawn.strftime(timeFormat)))
+	print('Door Opens at {}\n'.format(openDoor.strftime(timeFormat)))
+
+# Spring
+# test if natural daylight is less than 14h and increasing
+# back up to decreasing daylight then find the 10h day
+print('Spring Test')
+testDate = centralTz.localize(datetime(2019, 1, 4))
+events = pbmo.sun(testDate)
+dawn = events['dawn']
+sunrise = events['sunrise']
+sunset = events['sunset']
+dusk = events['dusk']
+
+todayDaylight = int(((sunset - sunrise).total_seconds())/60)
+print('Test Date {}'.format(testDate.strftime(dateFormat)))
+
+if todayDaylight < 840:
+	print('Less than 14 hours of natural daylight')
+	print('Natural Daylight {}'.format(str(timedelta(minutes=todayDaylight))[:-3]))
+	yesterday = testDate - timedelta(days = 1)
+	print('Yesterday was {}'.format(yesterday.strftime(dateFormat)))
+	yesterdayEvents = pbmo.sun(yesterday)
+	yesterdaySunrise = yesterdayEvents['sunrise']
+	yesterdaySunset = yesterdayEvents['sunset']
+	yesterdayDaylight = int(((yesterdaySunset - yesterdaySunrise).total_seconds())/60)
+	if todayDaylight < yesterdayDaylight:
+		print('Decreasing daylight')
+	else:
+		print('Increasing daylight')
+		increasingLight = False
+		i = 1
+		lastTestDate = testDate
+		while not increasingLight:
+			currentTestDate = testDate - timedelta(days = i)
+			events = pbmo.sun(currentTestDate)
+			currentLight = int(((events['sunset'] - events['sunrise']).total_seconds()))
+			lastEvents = pbmo.sun(lastTestDate)
+			lastLight = int(((lastEvents['sunset'] - lastEvents['sunrise']).total_seconds()))
+			#print('Current {} Last {}'.format(currentLight, lastLight))
+			#print('Increasing Light as we back up == {}'.format(currentLight > lastLight))
+			#print('Natural Daylight {}'.format(str(timedelta(seconds=currentLight))[:-3]))
+			if currentLight > lastLight and currentLight > 36000:
+				days = (testDate - currentTestDate).days
+				totalLightTime = todayDaylight + (days * 5)
+				openDoor = dusk - timedelta(minutes=totalLightTime)
+				print('Dawn {}'.format(dawn.strftime(timeFormat)))
+				print('Door Opens at {}'.format(openDoor.strftime(timeFormat)))
+				print('Set Date is {} days ago {}'.format(currentTestDate.strftime(dateFormat), days))
+				break
+			i += 1
+			lastTestDate = currentTestDate
+			if i > 60:
+				print('WTF the while loop failed!')
+				break
+

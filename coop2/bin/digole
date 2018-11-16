@@ -1,0 +1,10 @@
+#!/usr/bin/env python3
+
+import smbus
+#import subprocess
+
+#result = subprocess.check_output(["sudo", "i2cdetect", "-y" , "1"])
+#print(result)
+
+bus = smbus.SMBus(1)
+DEVICE_ADDRESS = 0x27
