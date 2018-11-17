@@ -4,6 +4,7 @@ import sys, os, pytz, astral, schedule, time
 from datetime import datetime, timedelta
 import RPi.GPIO as GPIO
 from PyQt4 import QtCore, QtGui, uic
+import threading
 
 # setup some user variables
 extraLight = 180 # minutes of extra light after sunrise
@@ -15,7 +16,8 @@ minLight = 600 # minutes of natural light to start adding light
 localTz = 'US/Central'
 centralTz = pytz.timezone('US/Central')
 dateFormat = '%b %d %Y'
-timeFormat = '%I:%M %p'
+hmFormat = '%I:%M %p'
+hmsFormat = '%I:%M:%S %p'
 doorStatus = 'Unknown'
 
 # coordinates = ['City', 'Country', 'latitude', longitude', 'timezone', 'elevation']
@@ -30,28 +32,32 @@ class Chicken(QtGui.QMainWindow):
 		super(Chicken, self).__init__()
 		path, filename = os.path.split(os.path.realpath(__file__))
 		uic.loadUi(os.path.join(path, 'coop3.ui'), self)
-		schedule.every().day.at('00:01').do(self.update)
+		schedule.every().day.at('00:01').do(self.updateSun)
+		schedule.every(1).seconds.do(self.updateClock)
 		self.connections()
-		self.update()
+		self.updateSun()
+		thread = threading.Thread(target=self.run, args=())
+		thread.daemon = True
+		thread.start()
 		self.show()
 
 
 	def connections(self):
 		self.actionQuit.triggered.connect(sys.exit)
-		self.updateAstral.clicked.connect(self.test)
+		self.updateAstral.clicked.connect(self.manualUpdate)
 
 	# on bootup/update set up the door/light open times for today
-	def update(self):
+	def updateSun(self):
 
 		today = centralTz.localize(datetime.now())
 		self.dateLabel.setText(today.strftime(dateFormat))
 
 
 		todayEvents = pbmo.sun(today)
-		self.dawnLabel.setText(todayEvents['dawn'].strftime(timeFormat))
-		self.sunriseLabel.setText(todayEvents['sunrise'].strftime(timeFormat))
-		self.sunsetLabel.setText(todayEvents['sunset'].strftime(timeFormat))
-		self.duskLabel.setText(todayEvents['dusk'].strftime(timeFormat))
+		self.dawnLabel.setText(todayEvents['dawn'].strftime(hmFormat))
+		self.sunriseLabel.setText(todayEvents['sunrise'].strftime(hmFormat))
+		self.sunsetLabel.setText(todayEvents['sunset'].strftime(hmFormat))
+		self.duskLabel.setText(todayEvents['dusk'].strftime(hmFormat))
 		daylightSeconds = (todayEvents['sunset'] - todayEvents['sunrise']).total_seconds()
 		minutes, seconds = divmod(daylightSeconds, 60)
 		hours, minutes = divmod(minutes, 60)
@@ -127,9 +133,18 @@ class Chicken(QtGui.QMainWindow):
 		print('Door Closes at {}\n'.format(todayDusk.strftime(timeFormat)))
 		"""
 
+	def updateClock(self):
+		today = centralTz.localize(datetime.now())
+		self.timeLabel.setText(today.strftime(hmsFormat))
 
-	def test(self):
-		print('testing')
+
+	def run(self):
+		while True:
+			schedule.run_pending()
+
+	def manualUpdate(self):
+		self.updateClock()
+
 
 if __name__ == '__main__':
 	app = QtGui.QApplication(sys.argv)
