@@ -18,13 +18,22 @@
     <property name="geometry">
      <rect>
       <x>30</x>
-      <y>310</y>
-      <width>85</width>
-      <height>27</height>
+      <y>256</y>
+      <width>141</width>
+      <height>81</height>
      </rect>
     </property>
+    <property name="font">
+     <font>
+      <pointsize>14</pointsize>
+      <weight>75</weight>
+      <italic>true</italic>
+      <bold>true</bold>
+     </font>
+    </property>
     <property name="text">
-     <string>Update</string>
+     <string>UPDATE
+STATS</string>
     </property>
    </widget>
    <widget class="QPushButton" name="pushButton">
@@ -45,13 +54,13 @@
      <rect>
       <x>10</x>
       <y>10</y>
-      <width>101</width>
+      <width>131</width>
       <height>17</height>
      </rect>
     </property>
     <property name="font">
      <font>
-      <pointsize>12</pointsize>
+      <pointsize>14</pointsize>
       <weight>75</weight>
       <italic>true</italic>
       <bold>true</bold>
@@ -65,10 +74,18 @@
     <property name="geometry">
      <rect>
       <x>10</x>
-      <y>60</y>
-      <width>191</width>
-      <height>121</height>
+      <y>70</y>
+      <width>241</width>
+      <height>181</height>
      </rect>
+    </property>
+    <property name="font">
+     <font>
+      <pointsize>14</pointsize>
+      <weight>75</weight>
+      <italic>true</italic>
+      <bold>true</bold>
+     </font>
     </property>
     <property name="title">
      <string>Todays Stats</string>
@@ -77,11 +94,14 @@
      <set>Qt::AlignLeading|Qt::AlignLeft|Qt::AlignTop</set>
     </property>
     <layout class="QGridLayout" name="gridLayout">
+     <property name="topMargin">
+      <number>10</number>
+     </property>
      <item row="1" column="0">
       <widget class="QLabel" name="label_2">
        <property name="font">
         <font>
-         <pointsize>12</pointsize>
+         <pointsize>14</pointsize>
          <weight>75</weight>
          <italic>true</italic>
          <bold>true</bold>
@@ -90,13 +110,16 @@
        <property name="text">
         <string>Sunrise</string>
        </property>
+       <property name="margin">
+        <number>1</number>
+       </property>
       </widget>
      </item>
      <item row="3" column="0">
       <widget class="QLabel" name="label_4">
        <property name="font">
         <font>
-         <pointsize>12</pointsize>
+         <pointsize>14</pointsize>
          <weight>75</weight>
          <italic>true</italic>
          <bold>true</bold>
@@ -105,13 +128,16 @@
        <property name="text">
         <string>Dusk</string>
        </property>
+       <property name="margin">
+        <number>1</number>
+       </property>
       </widget>
      </item>
      <item row="2" column="0">
       <widget class="QLabel" name="label_3">
        <property name="font">
         <font>
-         <pointsize>12</pointsize>
+         <pointsize>14</pointsize>
          <weight>75</weight>
          <italic>true</italic>
          <bold>true</bold>
@@ -120,13 +146,16 @@
        <property name="text">
         <string>Sunset</string>
        </property>
+       <property name="margin">
+        <number>1</number>
+       </property>
       </widget>
      </item>
      <item row="1" column="1">
       <widget class="QLabel" name="sunriseLabel">
        <property name="font">
         <font>
-         <pointsize>12</pointsize>
+         <pointsize>14</pointsize>
          <weight>75</weight>
          <italic>true</italic>
          <bold>true</bold>
@@ -135,13 +164,16 @@
        <property name="text">
         <string>TextLabel</string>
        </property>
+       <property name="margin">
+        <number>1</number>
+       </property>
       </widget>
      </item>
      <item row="0" column="0">
       <widget class="QLabel" name="label">
        <property name="font">
         <font>
-         <pointsize>12</pointsize>
+         <pointsize>14</pointsize>
          <weight>75</weight>
          <italic>true</italic>
          <bold>true</bold>
@@ -150,13 +182,16 @@
        <property name="text">
         <string>Dawn</string>
        </property>
+       <property name="margin">
+        <number>1</number>
+       </property>
       </widget>
      </item>
      <item row="0" column="1">
       <widget class="QLabel" name="dawnLabel">
        <property name="font">
         <font>
-         <pointsize>12</pointsize>
+         <pointsize>14</pointsize>
          <weight>75</weight>
          <italic>true</italic>
          <bold>true</bold>
@@ -164,6 +199,9 @@
        </property>
        <property name="text">
         <string>TextLabel</string>
+       </property>
+       <property name="margin">
+        <number>1</number>
        </property>
       </widget>
      </item>
@@ -171,7 +209,7 @@
       <widget class="QLabel" name="sunsetLabel">
        <property name="font">
         <font>
-         <pointsize>12</pointsize>
+         <pointsize>14</pointsize>
          <weight>75</weight>
          <italic>true</italic>
          <bold>true</bold>
@@ -179,6 +217,9 @@
        </property>
        <property name="text">
         <string>TextLabel</string>
+       </property>
+       <property name="margin">
+        <number>1</number>
        </property>
       </widget>
      </item>
@@ -186,7 +227,7 @@
       <widget class="QLabel" name="duskLabel">
        <property name="font">
         <font>
-         <pointsize>12</pointsize>
+         <pointsize>14</pointsize>
          <weight>75</weight>
          <italic>true</italic>
          <bold>true</bold>
@@ -195,13 +236,16 @@
        <property name="text">
         <string>TextLabel</string>
        </property>
+       <property name="margin">
+        <number>1</number>
+       </property>
       </widget>
      </item>
      <item row="4" column="0">
       <widget class="QLabel" name="label_5">
        <property name="font">
         <font>
-         <pointsize>12</pointsize>
+         <pointsize>14</pointsize>
          <weight>75</weight>
          <italic>true</italic>
          <bold>true</bold>
@@ -210,13 +254,16 @@
        <property name="text">
         <string>DayLight</string>
        </property>
+       <property name="margin">
+        <number>1</number>
+       </property>
       </widget>
      </item>
      <item row="4" column="1">
       <widget class="QLabel" name="daylightLabel">
        <property name="font">
         <font>
-         <pointsize>12</pointsize>
+         <pointsize>14</pointsize>
          <weight>75</weight>
          <italic>true</italic>
          <bold>true</bold>
@@ -224,6 +271,9 @@
        </property>
        <property name="text">
         <string>TextLabel</string>
+       </property>
+       <property name="margin">
+        <number>1</number>
        </property>
       </widget>
      </item>
@@ -233,14 +283,14 @@
     <property name="geometry">
      <rect>
       <x>10</x>
-      <y>30</y>
-      <width>101</width>
+      <y>40</y>
+      <width>141</width>
       <height>17</height>
      </rect>
     </property>
     <property name="font">
      <font>
-      <pointsize>12</pointsize>
+      <pointsize>14</pointsize>
       <weight>75</weight>
       <italic>true</italic>
       <bold>true</bold>
@@ -249,6 +299,103 @@
     <property name="text">
      <string>TextLabel</string>
     </property>
+   </widget>
+   <widget class="QGroupBox" name="gridGroupBox">
+    <property name="geometry">
+     <rect>
+      <x>469</x>
+      <y>10</y>
+      <width>311</width>
+      <height>280</height>
+     </rect>
+    </property>
+    <property name="font">
+     <font>
+      <pointsize>14</pointsize>
+      <weight>75</weight>
+      <italic>true</italic>
+      <bold>true</bold>
+     </font>
+    </property>
+    <property name="title">
+     <string>Manual Control</string>
+    </property>
+    <property name="alignment">
+     <set>Qt::AlignLeading|Qt::AlignLeft|Qt::AlignTop</set>
+    </property>
+    <layout class="QGridLayout" name="gridLayout_2">
+     <property name="topMargin">
+      <number>10</number>
+     </property>
+     <item row="0" column="1">
+      <widget class="QPushButton" name="openPB">
+       <property name="sizePolicy">
+        <sizepolicy hsizetype="Minimum" vsizetype="Minimum">
+         <horstretch>0</horstretch>
+         <verstretch>0</verstretch>
+        </sizepolicy>
+       </property>
+       <property name="font">
+        <font>
+         <pointsize>24</pointsize>
+         <weight>75</weight>
+         <italic>true</italic>
+         <bold>true</bold>
+        </font>
+       </property>
+       <property name="text">
+        <string>OPEN
+DOOR</string>
+       </property>
+      </widget>
+     </item>
+     <item row="1" column="1">
+      <widget class="QPushButton" name="closePB">
+       <property name="sizePolicy">
+        <sizepolicy hsizetype="Minimum" vsizetype="Minimum">
+         <horstretch>0</horstretch>
+         <verstretch>0</verstretch>
+        </sizepolicy>
+       </property>
+       <property name="font">
+        <font>
+         <pointsize>24</pointsize>
+         <weight>75</weight>
+         <italic>true</italic>
+         <bold>true</bold>
+        </font>
+       </property>
+       <property name="text">
+        <string>CLOSE
+DOOR</string>
+       </property>
+      </widget>
+     </item>
+     <item row="0" column="0">
+      <widget class="QPushButton" name="pushButton">
+       <property name="sizePolicy">
+        <sizepolicy hsizetype="Minimum" vsizetype="Minimum">
+         <horstretch>0</horstretch>
+         <verstretch>0</verstretch>
+        </sizepolicy>
+       </property>
+       <property name="font">
+        <font>
+         <pointsize>28</pointsize>
+         <weight>75</weight>
+         <italic>true</italic>
+         <bold>true</bold>
+        </font>
+       </property>
+       <property name="text">
+        <string>Lights</string>
+       </property>
+       <property name="checkable">
+        <bool>true</bool>
+       </property>
+      </widget>
+     </item>
+    </layout>
    </widget>
   </widget>
   <widget class="QMenuBar" name="menubar">
